@@ -3,6 +3,7 @@
 
 # ☁️ Flying Nimbus — Phase 1
 
+![](../image.png)
 ## High Level Requirements
 AWS Support for the following:
 * [ ] EC2
@@ -10,6 +11,14 @@ AWS Support for the following:
 * [ ] RDS
 * [ ] Dev Tunnels
 * [ ] Service Catalog
+
+SDLC
+* [ ] Unit Test
+* [ ] Integration Test
+* [ ] Version Strategy
+* [ ] Branch Strategy Defined
+
+
 
 ## 1. Core Architecture (Foundation)
 
