@@ -4,208 +4,178 @@
 # ☁️ Flying Nimbus — Phase 1
 
 ![](../image.png)
-## High Level Requirements
-AWS Support for the following:
-* [ ] EC2
-* [ ] EC2 SSM
-* [ ] RDS
-* [ ] Dev Tunnels
-* [ ] Service Catalog
-
-SDLC
-* [ ] Unit Test
-* [ ] Integration Test
-* [ ] Version Strategy
-* [ ] Branch Strategy Defined
-
-
-
-## 1. Core Architecture (Foundation)
-
-### App / Core
-
-* [ ] Define **AppServices** 
-  * Holds:
-    * active provider (`aws`, `azure`, future)
-    * shared config (region, profile)
-    * backend provider services (AWS wrapper)
-    * (First Pass Init Config for AWS )
-* [ ] No direct SDK usage in TUI models
-* [ ] Providers expose **capabilities**, not screens
-
-### Navigation
-
-* [ ] RootModel
-  * [ ] Holds navigation stack (`[]tea.Model`)
-  * [ ] Handles `NavigationMsg`
-  * [ ] Breadcrumb rendering support (Do we even need?)
-* [ ] NavigationMsg
-  * [ ] Push model
-  * [ ] Pop model
-  * [ ] Reset stack
-* [ ] Breadcrumb component (read-only, derived from stack) (Do we need for Phase 1)
-
-### TUI Framework
-* [ ] Bubble Tea
-* [ ] LipGloss:
-* [ ] Bubbles:
-  * [ ] list
-  * [ ] spinner
-  * [ ] textinput
-  * [ ] help
-  * [ ] etc
-* [ ] Standard keybindings
-  * [ ] Enter = select
-  * [ ] Esc = back
-  * [ ] q = quit
-  * [ ] ? = help
 
 ---
+**Flying Nimbus** is a **terminal user interface (TUI)** for managing cloud infrastructure with a strong focus on **developer workflows**.
 
-## 2. Provider Selection
+Phase 1 prioritizes rapid delivery of a small, high-impact set of capabilities to provide immediate value to users.
 
-### Providers Menu
+Pre Conditions
 
-* [ ] ProvidersModel (TUI)
-  * [ ] List of providers
-    * AWS
-    * (Azure – placeholder)
-* [ ] Provider selection initializes provider backend
-* [ ] Provider-specific menu pushed onto stack
-* [ ] Show visually the account and profile (somewhere)
+* AWS CLI v2
+* Login via SSO
+* AWS PROFILE set
+* Region set
 
----
+## Phase 1 Objectives
 
-## 3. AWS Provider (Backend)
+* Deliver a TUI that supports the following
+  * EC2 (management)
+  * Dev Tunnel
+  * RDS (Display Information)
+  * Service Catalog
+* Establish clean separation utilizing MVC patterns
+* Ensure testable, maintainable, and extensible
+* Simple UI (Phase 1\)
 
-### AWS Service Wrapper
-* [ ] `AWSService` abstraction
-  * [ ] EC2
-  * [ ] SSM
-  * [ ] RDS
-  * [ ] Service Catalog
-* [ ] Configurable via:
-  * [ ] AWS profile
-  * [ ] Region
-* [ ] Context-aware (cancelable operations)
-* [ ] Error wrapping with user-friendly messages
+## Phase 1 Timeline
 
----
+* Development and testing complete by mid February
+* User documentation by mid February
+* Roll out to Platform Eng and Bix team by end of February
 
-## 4. AWS Provider Menu (TUI)
+### Out of Scope \- Phase 1
 
-### AWS Provider Menu
-* [ ] EC2
-* [ ] EC2 SSM
-* [ ] RDS
-* [ ] Dev Tunnels
-* [ ] Service Catalog
+The items are deemed `nice to have` ( re-evaluate after Phase 1\)
 
-This is a **provider-level submenu**, not root.
+* Breadcrumb support
+* Sidebar (I would like to rethink the UI after Phase 1\)
+* Azure Support
+* Multiple Dev Tunnel support
+* Dynamic AWS configuration (dynamically change AWS Account and Region )
+* Aesthetic Focus (Idc if its ugly as long as it works )
 
----
+## Design
 
-## 5. EC2 Management
-### EC2 List
-* [ ] List EC2 instances
-  * [ ] Name
-  * [ ] Instance ID
-  * [ ] State
-  * [ ] Type
-* [ ] Loading state
-* [ ] Error handling
+### High Level Flow
 
-### EC2 Actions
-* [ ] Start instance
-* [ ] Stop instance
-* [ ] Refresh list
+Root View \-\> Provider Selection Menu \-\> (only AWS) AWS Provider Menu
 
----
+### Core Architecture
 
-## 6. EC2 SSM
+* TUI Framework (Bubbletea)
+* Clear Separation (MVC,SOLID):
+  * TUI Models (View)
+  * Core Services (Scaffolding)
+  * Provider Backend implementations (Backend)
+* Log Framework
+* Exhaustive Testing Framework
+  * Unit Test
+  * Integration Test
+* Automated builds (easy installs for users)
+* No dependency on Cloud SDKS from TUI
+* Standardized keyboard navigation
+  * Enter (select)
+  * Escape (back)
+  * q  (Quit)
+  * ? (Display Help)
 
-### SSM Capability
-* [ ] Detect SSM-managed instances
-* [ ] Start SSM session
-* [ ] Show connection status
-* [ ] Graceful disconnect
+### Root Provider
 
----
+Provider Selection Interface
 
-## 7. RDS
+* Amazon Web Services (aws)
+* Azure (Place holder)
 
-### RDS List
+### AWS Provider
 
-* [ ] List available databases
-  * [ ] Identifier
-  * [ ] Engine
-  * [ ] Status
-  * [ ] Endpoint (masked)
-* [ ] Filter by engine
-* [ ] Refresh support
+AWS configuration attempts to automatically grab the current AWS Profile and Region (AWS\_PROFILE, AWS\_REGION) and validate the credentials at the start of TUI.
 
----
+Capabilities (Menu)
 
-## 8. Dev Tunnels 
+* EC2 (Management & SSM)
+* RDS
+* Service Catalog
 
-### Dev Tunnel Management
-* [ ] Create N concurrent dev tunnels
-* [ ] Select RDS DB as tunnel target
-* [ ] Choose:
-  * [ ] Local port
-  * [ ] Remote port
-* [ ] Tunnel runs in background
-* [ ] Persist tunnel metadata
+#### EC2
 
-### Tunnel Lifecycle
-* [ ] Start tunnel
-* [ ] Stop tunnel
-* [ ] List active tunnels
-* [ ] Auto-reconnect (optional phase 2)
+List available EC2s including the following information
 
----
+* Instance name
+* Instance ID
+* Instance Type
+* Instance State
 
-## 9. Service Catalog
+Display detailed information for current EC2 instance (to the right of the list of ec2)
 
-### Service Catalog List
+* Basic Information
+* Network (VPC, Subnets, IPs)
+* Tags
 
-* [ ] List available products
-* [ ] Show:
-  * [ ] Name
-  * [ ] Version
-  * [ ] Status
+Actions
 
-### Actions
-* [ ] Provision product
-* [ ] Terminate product
-* [ ] Show provisioning progress
+* Refresh list
+* View Iam Policies
+* Start
+* Stop
+* SSM Connect
 
----
+#### RDS
 
-## 10. UX / DX
+List available RDS instances
 
-### UX
+Display detailed information
 
-* [ ] Consistent loading indicators
-* [ ] Clear error messages
-* [ ] Keyboard-only navigation
+* Hostname of database
+* Port
+* Security Group Ingress Rules
 
-### DX
+Actions
 
-* [ ] Clean separation:
-  * TUI → App/Core → Provider Backend
-* [ ] Provider-agnostic navigation logic
-* [ ] Easy to add new providers
+* Create Dev Tunnel (SSM Tunnel)
 
----
+Creation of Dev Tunnel
 
-## 11. CI / CD & Quality Gates
+* Assume Default Port
+* Use Bastion Host
 
-### Continuous Integration (CI)
+#### Service Catalog
 
-* [ ] CI must pass:
-  * build
-  * lint
-  * unit tests
+List available products
 
----
+* Name
+* Version
+* Status
+
+List already provisioned products
+Show Provisioning Progress
+
+## Developer Experience
+
+### Branch Strategy
+
+main branch
+
+* Serves as active development branch
+* Not guaranteed to be production-ready at all times
+* All new features shall be merged into `main`
+
+Feature branches
+
+* All new development shall occur on short-lived branches
+* Must be merged back into `main` via PRs
+* PRs can be draft (do not pull it out of draft unless ready to be review’d)
+
+### Release
+
+* Tagging a commit on `main` with a semantic version
+* Generating a corresponding release artifact
+* Attaching built binaries to the release
+* Publishing release notes summarizing changes
+
+### Quality Expectations
+
+* All new functionality must include appropriate unit tests
+* Code must pass linting and static analysis checks
+* Breaking changes must be reflected in version increments
+* Unstable or experimental functionality should be clearly identified
+
+### Developer Workflow Summary
+
+* Create a feature branch from main
+* Implement changes
+* Run local tests and linting
+* Submit a pull request targeting main
+* Pass CI validation
+* Merge into main
+* Tag a release when appropriate
