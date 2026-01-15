@@ -11,7 +11,7 @@ permissions:
 jobs:
     build_test:
         name: CI
-        runs-on: chopd3bPrd-linux-large
+        runs-on: ubuntu-latest
         steps:
             - name: Checkout code
               uses: actions/checkout@v6
@@ -21,8 +21,7 @@ jobs:
                 go-version: '1.25'
             - name: Setup build tools
               run: |
-                # Trigger CI
-                sudo yum install -y make
+                sudo apt install -y make
             - name: Lint code
               run: |
                 if [ -n "$(gofmt -l .)" ]; then
