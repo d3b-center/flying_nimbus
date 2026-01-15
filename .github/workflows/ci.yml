@@ -11,8 +11,7 @@ permissions:
 jobs:
     build:
         name: Build code
-        runs-on: chopd3bPrd-linux-small
-        timeout-minutes: 10
+        runs-on: chopd3bPrd-linux-large
         steps:
             - name: Checkout code
               uses: actions/checkout@v6
