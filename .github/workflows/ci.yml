@@ -22,7 +22,7 @@ jobs:
                 go-version: '1.25'
             - name: Setup build tools
               run: |
-                yum install -y make
+                sudo yum install -y make
             - name: Build code
               run: |
                 make build
