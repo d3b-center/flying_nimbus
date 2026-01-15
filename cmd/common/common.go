@@ -18,7 +18,7 @@ func InitLogger() *os.File {
 		log.Fatal("Failed to open log file:", err)
 	}
 
-	log.SetOutput(logFile )
+	log.SetOutput(logFile)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	return logFile
