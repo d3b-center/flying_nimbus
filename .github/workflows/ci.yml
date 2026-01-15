@@ -9,8 +9,8 @@ permissions:
     contents: read
 
 jobs:
-    build:
-        name: Build code
+    build_test:
+        name: Build and Test code
         runs-on: chopd3bPrd-linux-large
         steps:
             - name: Checkout code
@@ -25,4 +25,7 @@ jobs:
             - name: Build code
               run: |
                 make build
+            - name: Test code
+              run: |
+                make test
             
