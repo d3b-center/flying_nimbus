@@ -10,7 +10,7 @@ permissions:
 
 jobs:
     lint:
-        name: Lint
+        name: 🧹 Lint
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
                     exit 1
                 fi
     build:
-        name: Build
+        name: 🛠️ Build
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
@@ -45,7 +45,7 @@ jobs:
               run: |
                 make build
     test:
-        name: Test
+        name: ✅ Test
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
