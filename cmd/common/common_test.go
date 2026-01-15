@@ -1,8 +1,8 @@
 package common
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 func TestHelloWord(t *testing.T) {

@@ -1,4 +1,4 @@
-name: Build and Test Flying Nimbus
+name: CI
 
 on:
     pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
     build_test:
-        name: Build and Test code
+        name: CI
         runs-on: chopd3bPrd-linux-large
         steps:
             - name: Checkout code
@@ -22,6 +22,12 @@ jobs:
             - name: Setup build tools
               run: |
                 sudo yum install -y make
+            - name: Lint code
+              run: |
+                if [ -n "$(gofmt -l .)" ]; then
+                    echo "Go files are not formatted. Run 'gofmt -w .'"
+                    exit 1
+                fi
             - name: Build code
               run: |
                 make build
