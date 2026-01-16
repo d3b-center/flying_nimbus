@@ -10,8 +10,8 @@ import (
 )
 
 type AwsProviderModel struct {
-	appService *app.App
-	menu       list.Model
+	app  *app.App
+	menu list.Model
 }
 
 func (m AwsProviderModel) Init() tea.Cmd {
@@ -62,7 +62,7 @@ func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 	h, v := constants.DocStyle.GetFrameSize()
 	l.SetSize(constants.WindowSize.Width-h, constants.WindowSize.Height-v)
 	return AwsProviderModel{
-		appService: appService,
-		menu:       l,
+		app:  appService,
+		menu: l,
 	}
 }
