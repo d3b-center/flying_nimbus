@@ -20,7 +20,7 @@ func InitRoot() RootModel {
 	stack := make([]tea.Model, 0, 3)
 
 	// Rename to not conflict with Standard library Context
-	appService := &app.AppServices{}
+	appService := &app.App{}
 
 	stack = append(stack, NewProvidersModel(appService))
 
@@ -32,7 +32,7 @@ func InitRoot() RootModel {
 }
 
 type RootModel struct {
-	appService *app.AppServices
+	appService *app.App
 	// Might need for mutex locks
 	stack []tea.Model
 }

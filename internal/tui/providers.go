@@ -11,23 +11,23 @@ import (
 )
 
 type ProvidersModel struct {
-	appService *app.AppServices
+	appService *app.App
 	list       list.Model
 }
 
-func NewProvidersModel(appService *app.AppServices) ProvidersModel {
+func NewProvidersModel(appService *app.App) ProvidersModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"aws",
 			"Amazon Web Services",
-			func(appService *app.AppServices) tea.Model {
+			func(appService *app.App) tea.Model {
 				return aws.NewAWSProviderModel(appService)
 			},
 		),
 		common.NewNavItem(
 			"azure",
 			"Azure (not good)",
-			func(appService *app.AppServices) tea.Model {
+			func(appService *app.App) tea.Model {
 				return aws.NewAWSProviderModel(appService)
 			},
 		),

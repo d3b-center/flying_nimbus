@@ -9,10 +9,10 @@ import (
 type NavItem struct {
 	title string
 	desc  string
-	Model func(appService *app.AppServices) tea.Model
+	Model func(appService *app.App) tea.Model
 }
 
-func NewNavItem(title string, desc string, model func(appService *app.AppServices) tea.Model) NavItem {
+func NewNavItem(title string, desc string, model func(appService *app.App) tea.Model) NavItem {
 	return NavItem{
 		title: title,
 		desc:  desc,
