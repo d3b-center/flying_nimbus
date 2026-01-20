@@ -49,6 +49,7 @@ func init() {
 
 func Run(cmd *cobra.Command, args []string) {
 	app, _ := app.InitApp(verbose)
+	defer app.Shutdown()
 
 	tui.StartTea(app)
 }
