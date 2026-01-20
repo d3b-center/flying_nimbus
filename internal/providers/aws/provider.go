@@ -10,8 +10,8 @@ import (
 )
 
 type AwsProviderModel struct {
-	appService *app.AppServices
-	menu       list.Model
+	app  *app.App
+	menu list.Model
 }
 
 func (m AwsProviderModel) Init() tea.Cmd {
@@ -29,12 +29,12 @@ func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func NewAWSProviderModel(appService *app.AppServices) AwsProviderModel {
+func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"EC2",
 			"Manage EC2 Resources",
-			func(appService *app.AppServices) tea.Model {
+			func(appService *app.App) tea.Model {
 				// NewAWSProviderModel Please Remove (dummy model)
 				return NewAWSProviderModel(appService)
 			},
@@ -42,7 +42,7 @@ func NewAWSProviderModel(appService *app.AppServices) AwsProviderModel {
 		common.NewNavItem(
 			"RDS",
 			"Manage RDS Resources",
-			func(appService *app.AppServices) tea.Model {
+			func(appService *app.App) tea.Model {
 				// NewAWSProviderModel Please Remove (dummy model)
 				return NewAWSProviderModel(appService)
 			},
@@ -50,7 +50,7 @@ func NewAWSProviderModel(appService *app.AppServices) AwsProviderModel {
 		common.NewNavItem(
 			"Service Catalog",
 			"Service Catalog",
-			func(appService *app.AppServices) tea.Model {
+			func(appService *app.App) tea.Model {
 				// NewAWSProviderModel Please Remove (dummy model)
 				return NewAWSProviderModel(appService)
 			},
@@ -62,7 +62,7 @@ func NewAWSProviderModel(appService *app.AppServices) AwsProviderModel {
 	h, v := constants.DocStyle.GetFrameSize()
 	l.SetSize(constants.WindowSize.Width-h, constants.WindowSize.Height-v)
 	return AwsProviderModel{
-		appService: appService,
-		menu:       l,
+		app:  appService,
+		menu: l,
 	}
 }

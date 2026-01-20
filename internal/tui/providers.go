@@ -11,24 +11,24 @@ import (
 )
 
 type ProvidersModel struct {
-	appService *app.AppServices
-	list       list.Model
+	app  *app.App
+	list list.Model
 }
 
-func NewProvidersModel(appService *app.AppServices) ProvidersModel {
+func NewProvidersModel(application *app.App) ProvidersModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"aws",
 			"Amazon Web Services",
-			func(appService *app.AppServices) tea.Model {
-				return aws.NewAWSProviderModel(appService)
+			func(application *app.App) tea.Model {
+				return aws.NewAWSProviderModel(application)
 			},
 		),
 		common.NewNavItem(
 			"azure",
 			"Azure (not good)",
-			func(appService *app.AppServices) tea.Model {
-				return aws.NewAWSProviderModel(appService)
+			func(a *app.App) tea.Model {
+				return aws.NewAWSProviderModel(a)
 			},
 		),
 	}
@@ -37,8 +37,8 @@ func NewProvidersModel(appService *app.AppServices) ProvidersModel {
 	l.Title = "Select Provider!!"
 
 	return ProvidersModel{
-		appService: appService,
-		list:       l,
+		app:  application,
+		list: l,
 	}
 }
 
@@ -62,7 +62,7 @@ func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			item := m.list.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
 				return NavigateMsg{
-					Model: item.Model(m.appService),
+					Model: item.Model(m.app),
 				}
 			}
 		}
