@@ -28,10 +28,10 @@ func (a App) Shutdown() error {
 	return nil
 }
 
-func InitApp() (*App, error) {
+func InitApp(verbose bool) (*App, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	logger, cleanupLog, err := InitLogger()
+	logger, cleanupLog, err := InitLogger(verbose)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -53,7 +53,7 @@ func InitApp() (*App, error) {
 	}, nil
 }
 
-func InitLogger() (*slog.Logger, func() error, error) {
+func InitLogger(verbose bool) (*slog.Logger, func() error, error) {
 	homeDir, err := os.UserHomeDir()
 
 	if err != nil {
@@ -73,9 +73,12 @@ func InitLogger() (*slog.Logger, func() error, error) {
 		return nil, nil, err
 	}
 
-	// TODO: Pass in loglevel
+	logLevel := slog.LevelInfo
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
 	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: logLevel,
 	})
 
 	logger := slog.New(handler)
