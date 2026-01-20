@@ -1,6 +1,10 @@
 package aws
 
-import "context"
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+)
 
 type EC2Instance struct {
 	InstanceID             string
@@ -17,10 +21,14 @@ type EC2Instance struct {
 	LaunchTime             string
 }
 
-type EC2Service interface {
-	ListInstances(ctx context.Context) ([]EC2Instance, error)
-	StartInstance(ctx context.Context, instanceID string) error
-	StopInstance(ctx context.Context, instanceID string) error
-	TerminateInstance(ctx context.Context, instanceID string) error
-	GetInstanceDetails(ctx context.Context, instanceID string) (*EC2Instance, error)
+type ec2API interface {
+	DescribeInstancesAPI(ctx context.Context, params *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error)
+}
+
+type EC2Service struct {
+	api ec2API
+}
+
+func (e EC2Service) ListInstances(ctx context.Context) ([]EC2Instance, error) {
+	return nil, nil
 }
