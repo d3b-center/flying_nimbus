@@ -5,7 +5,7 @@ package cmd
 
 import (
 	"os"
-
+	"fmt"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/tui"
 
@@ -14,6 +14,11 @@ import (
 
 var (
 	verbose bool
+	Version string
+	CommitHash string
+	Branch string
+	BuildDate string
+	Platform string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -26,9 +31,16 @@ developer workflows.`,
 	Run: Run,
 }
 
+var versionCmd = &cobra.Command{
+	Use: "version",
+	Short: "Print the version",
+	Run: PrintVersion,
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	rootCmd.AddCommand(versionCmd)
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
@@ -52,4 +64,14 @@ func Run(cmd *cobra.Command, args []string) {
 	defer app.Shutdown()
 
 	tui.StartTea(app)
+}
+
+func PrintVersion(cmd *cobra.Command, args []string) {
+	fmt.Printf("Version: %s\nCommit Hash: %s\nBranch: %s\nBuild date: %s\nPlatform: %s\n",
+		Version,
+		CommitHash,
+		Branch,
+		BuildDate,
+		Platform,
+	)
 }
