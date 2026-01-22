@@ -4,21 +4,21 @@ Copyright © 2026 D3B
 package cmd
 
 import (
-	"os"
-	"fmt"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/tui"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	verbose bool
-	Version string
+	verbose    bool
+	Version    string
 	CommitHash string
-	Branch string
-	BuildDate string
-	Platform string
+	Branch     string
+	BuildDate  string
+	Platform   string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -32,9 +32,9 @@ developer workflows.`,
 }
 
 var versionCmd = &cobra.Command{
-	Use: "version",
+	Use:   "version",
 	Short: "Print the version",
-	Run: PrintVersion,
+	Run:   PrintVersion,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
