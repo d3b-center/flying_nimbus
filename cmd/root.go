@@ -51,7 +51,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	rootCmd.PersistentFlags().BoolVar(&showVersion, "version", false, "Enable verbose output")
+	rootCmd.PersistentFlags().BoolVar(&showVersion, "version", false, "Show version and build info")
 }
 
 func Run(cmd *cobra.Command, args []string) {
