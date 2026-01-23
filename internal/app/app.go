@@ -4,6 +4,7 @@ import (
 	"context"
 	aws "flying_nimbus/internal/providers/aws/backend"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 type App struct {
 	Logger     *slog.Logger
+	LogBuffer  *LogBuffer
 	AWS        *aws.AwsService
 	Context    context.Context
 	cancel     context.CancelFunc
@@ -31,7 +33,7 @@ func (a App) Shutdown() error {
 func InitApp(verbose bool) (*App, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	logger, cleanupLog, err := InitLogger(verbose)
+	logger, buffer, cleanupLog, err := InitLogger(verbose)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -46,6 +48,8 @@ func InitApp(verbose bool) (*App, error) {
 	}
 
 	return &App{
+		Logger:     logger,
+		LogBuffer: buffer,
 		AWS:        awsSvc,
 		Context:    ctx,
 		cancel:     cancel,
@@ -53,16 +57,16 @@ func InitApp(verbose bool) (*App, error) {
 	}, nil
 }
 
-func InitLogger(verbose bool) (*slog.Logger, func() error, error) {
+func InitLogger(verbose bool) (*slog.Logger, *LogBuffer, func() error, error) {
 	homeDir, err := os.UserHomeDir()
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	logDir := filepath.Join(homeDir, ".flying_nimbus", "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	ts := time.Now().UTC().Format("20060102-150405")
@@ -70,15 +74,31 @@ func InitLogger(verbose bool) (*slog.Logger, func() error, error) {
 
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	logLevel := slog.LevelInfo
 	if verbose {
 		logLevel = slog.LevelDebug
 	}
-	handler := slog.NewTextHandler(f, &slog.HandlerOptions{
-		Level: logLevel,
+	buffer := NewLogBuffer()
+	writer := io.MultiWriter(f, buffer)
+	handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     logLevel,
+		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			switch attr.Key {
+			case slog.TimeKey:
+				if t, ok := attr.Value.Any().(time.Time); ok {
+					return slog.String(slog.TimeKey, t.Format("15:04:05"))
+				}
+			case slog.SourceKey:
+				if source, ok := attr.Value.Any().(*slog.Source); ok {
+					return slog.String(slog.SourceKey, fmt.Sprintf("%s:%d", filepath.Base(source.File), source.Line))
+				}
+			}
+			return attr
+		},
 	})
 
 	logger := slog.New(handler)
@@ -88,5 +108,5 @@ func InitLogger(verbose bool) (*slog.Logger, func() error, error) {
 		return f.Close()
 	}
 
-	return logger, cleanup, nil
+	return logger, buffer, cleanup, nil
 }
