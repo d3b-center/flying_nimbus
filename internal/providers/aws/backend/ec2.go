@@ -1,6 +1,10 @@
 package aws
 
-import "context"
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+)
 
 type EC2Instance struct {
 	InstanceID             string
@@ -37,5 +41,3 @@ func (e EC2Service) ListInstances(ctx context.Context) ([]EC2Instance, error) {
 		}
 	}
 }
-
-func 

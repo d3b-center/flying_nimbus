@@ -66,7 +66,7 @@ func InitLogger(verbose bool) (*slog.Logger, func() error, error) {
 	}
 
 	ts := time.Now().UTC().Format("20060102-150405")
-	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", ts))
+	logPath := filepath.Join(logDir, fmt.Sprintf("flying-nimbus-%s.log", ts))
 
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
