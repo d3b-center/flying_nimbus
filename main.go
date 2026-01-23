@@ -1,10 +1,10 @@
+/*
+Copyright © 2026 D3B
+*/
 package main
 
-import "flying_nimbus/cmd/services"
+import "flying_nimbus/cmd"
 
 func main() {
-	app := services.NewApp()
-	if err := app.Run(); err != nil {
-		panic(err)
-	}
+	cmd.Execute()
 }
