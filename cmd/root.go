@@ -13,12 +13,13 @@ import (
 )
 
 var (
-	verbose    bool
-	Version    string
-	CommitHash string
-	Branch     string
-	BuildDate  string
-	Platform   string
+	verbose     bool
+	showVersion bool
+	Version     string
+	CommitHash  string
+	Branch      string
+	BuildDate   string
+	Platform    string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -31,16 +32,9 @@ developer workflows.`,
 	Run: Run,
 }
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version",
-	Run:   PrintVersion,
-}
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	rootCmd.AddCommand(versionCmd)
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
@@ -57,9 +51,15 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	rootCmd.PersistentFlags().BoolVar(&showVersion, "version", false, "Enable verbose output")
 }
 
 func Run(cmd *cobra.Command, args []string) {
+	if showVersion {
+		PrintVersion(cmd, args)
+		return
+	}
+
 	app, _ := app.InitApp(verbose)
 	defer app.Shutdown()
 
