@@ -11,6 +11,7 @@ import (
 
 type AwsService struct {
 	config *aws.Config
+	Rds    *RdsService
 }
 
 func InitAwsService(ctx context.Context) (*AwsService, error) {
@@ -23,8 +24,11 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	slog.Info(fmt.Sprintf("AWS Region: %s", cfg.Region))
 
+	rds := InitRdsService(cfg)
+
 	return &AwsService{
 		config: &cfg,
+		Rds:    rds,
 	}, nil
 
 }

@@ -2,9 +2,11 @@ package aws
 
 import (
 	"flying_nimbus/internal/app"
+	"flying_nimbus/internal/providers/aws/views"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -29,6 +31,19 @@ func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
 	}
 
+	switch msg := msg.(type) {
+
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, constants.Keymap.Enter):
+			item := m.menu.SelectedItem().(common.NavItem)
+			return m, func() tea.Msg {
+				return common.NavigateMsg{
+					Model: item.Model(m.app),
+				}
+			}
+		}
+	}
 	var cmd tea.Cmd
 	m.menu, cmd = m.menu.Update(msg)
 	return m, cmd
@@ -48,8 +63,7 @@ func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 			"RDS",
 			"Manage RDS Resources",
 			func(appService *app.App) tea.Model {
-				// NewAWSProviderModel Please Remove (dummy model)
-				return NewAWSProviderModel(appService)
+				return views.InitRdsViewModel(appService)
 			},
 		),
 		common.NewNavItem(

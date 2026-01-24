@@ -5,6 +5,7 @@ import (
 	"flying_nimbus/internal/providers/aws"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,11 +57,11 @@ func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		top, right, bottom, left := constants.DocStyle.GetMargin()
 		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
+		switch {
+		case key.Matches(msg, constants.Keymap.Enter):
 			item := m.list.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
-				return NavigateMsg{
+				return common.NavigateMsg{
 					Model: item.Model(m.app),
 				}
 			}

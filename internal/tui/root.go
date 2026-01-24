@@ -95,12 +95,12 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		constants.WindowSize = msg
-	case NavigateMsg:
+	case common.NavigateMsg:
 		m.stack = append(m.stack, msg.Model)
 		m.logNavigation("push", msg.Model)
 		return m, tea.Batch(msg.Model.Init(), m.syncWindowSize())
 
-	case BackMsg:
+	case common.BackMsg:
 		if len(m.stack) > 1 {
 			m.logNavigation("pop", m.stack[len(m.stack)-1])
 			m.stack = m.stack[:len(m.stack)-1]
@@ -113,7 +113,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, constants.Keymap.Back):
 			return m, func() tea.Msg {
-				return BackMsg{}
+				return common.BackMsg{}
 			}
 		case key.Matches(msg, constants.Keymap.Quit):
 			return m, tea.Quit
