@@ -2,6 +2,7 @@ package aws
 
 import (
 	"flying_nimbus/internal/app"
+	"flying_nimbus/internal/providers/aws/views"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 
@@ -35,8 +36,7 @@ func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 			"EC2",
 			"Manage EC2 Resources",
 			func(appService *app.App) tea.Model {
-				// NewAWSProviderModel Please Remove (dummy model)
-				return NewAWSProviderModel(appService)
+				return views.InitEc2ViewModel(appService)
 			},
 		),
 		common.NewNavItem(

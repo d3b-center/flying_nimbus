@@ -44,6 +44,8 @@ func InitApp(verbose bool) (*App, error) {
 		cancel()
 		return nil, err
 	}
+	
+	slog.Debug()
 
 	return &App{
 		AWS:        awsSvc,
