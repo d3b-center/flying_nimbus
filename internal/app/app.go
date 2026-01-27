@@ -49,7 +49,7 @@ func InitApp(verbose bool) (*App, error) {
 
 	return &App{
 		Logger:     logger,
-		LogBuffer: buffer,
+		LogBuffer:  buffer,
 		AWS:        awsSvc,
 		Context:    ctx,
 		cancel:     cancel,

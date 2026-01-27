@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"fmt"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"time"
@@ -47,7 +47,7 @@ func InitRoot(appService *app.App) RootModel {
 type RootModel struct {
 	appService *app.App
 	// Might need for mutex locks
-	stack       []tea.Model
+	stack          []tea.Model
 	showDevConsole bool
 }
 

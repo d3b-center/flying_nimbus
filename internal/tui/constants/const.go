@@ -11,9 +11,9 @@ var WindowSize tea.WindowSizeMsg
 var DocStyle = lipgloss.NewStyle().Margin(0, 2)
 
 type keymap struct {
-	Enter         key.Binding
-	Back          key.Binding
-	Quit          key.Binding
+	Enter            key.Binding
+	Back             key.Binding
+	Quit             key.Binding
 	ToggleDevConsole key.Binding
 }
 
