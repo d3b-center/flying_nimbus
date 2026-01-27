@@ -15,17 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
-	instancesListStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-	instanceDetailStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-)
+
 
 type RdsViewModel struct {
 	app               *app.App
@@ -96,13 +86,12 @@ func (m RdsViewModel) View() string {
 	slog.Debug(fmt.Sprintf("Height %d", m.windowSize.Height))
 
 	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem()))
+	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem()))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	slog.Debug(fmt.Sprintf("%v", msg))
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
@@ -133,7 +122,7 @@ func dbInstancesToItems(dbs []aws.RDSInstance) []list.Item {
 	return items
 }
 
-func generateInstanceDetail(selectedItem list.Item) string {
+func generateRdsInstanceDetail(selectedItem list.Item) string {
 	// Skeleton detail sections
 	if selectedItem == nil {
 		return "No Info"
@@ -143,17 +132,6 @@ func generateInstanceDetail(selectedItem list.Item) string {
 	if !ok {
 		return "No Info"
 	}
-
-	var (
-		headerStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("62")).
-				Foreground(lipgloss.Color("230")).
-				Padding(0, 1)
-		sectionHeaderStyle = lipgloss.NewStyle().
-					Bold(true).
-					Foreground(lipgloss.Color("62")).
-					PaddingBottom(1)
-	)
 
 	rows := []string{
 		headerStyle.Render("Instance Details"),

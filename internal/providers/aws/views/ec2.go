@@ -16,28 +16,14 @@ import (
 )
 
 
-var (
-	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
-	instancesListStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-	instanceDetailStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("62")).
-			Foreground(lipgloss.Color("230")).
-			Padding(0, 1)
-)
-
 type Ec2ViewModel struct {
 	app *app.App
 	list list.Model
 	loader spinner.Model
 	isLoading bool
+	windowSize common.ContentWindowSizeMsg
+	instanceListWidth int
+	detailsWidth int
 }
 
 type (
@@ -91,26 +77,22 @@ func (m Ec2ViewModel) View() string {
 	m.list.SetSize(instanceListWidth, contentHeight)
 
 	left := instancesListStyle.Width(instanceListWidth).Height(contentHeight).Render(m.list.View())
-	right := instanceDetailStyle.Width(detailsWidth).Height(contentHeight).Render(generateInstanceDetail(m.list.SelectedItem()))
+	right := instanceDetailStyle.Width(detailsWidth).Height(contentHeight).Render(generateEc2InstanceDetail(m.list.SelectedItem()))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	slog.Debug(fmt.Sprintf("%v", msg))
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	// TODO: This should be a custom WindowSizeMsg from Root
-	case tea.WindowSizeMsg:
+	case common.ContentWindowSizeMsg:
 		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
-		constants.WindowSize = msg
 
-		h, v := constants.DocStyle.GetFrameSize()
+		m.windowSize = msg
+		m.instanceListWidth = msg.Width / 3
+		m.detailsWidth = msg.Width - m.instanceListWidth
 
-		contentWidth := msg.Width - h
-		contentHeight := msg.Height - v
-
-		m.list.SetSize(contentWidth, contentHeight)
+		m.list.SetSize(m.instanceListWidth, msg.Height)
 	case ec2InstancesLoadedMsg:
 		m.isLoading = false
 		m.list.SetItems(msg)
@@ -131,7 +113,7 @@ func ec2InstancesToItems(instances []aws.Ec2Instance) []list.Item {
 	return items
 }
 
-func generateInstanceDetail(selectedItem list.Item) string {
+func generateEc2InstanceDetail(selectedItem list.Item) string {
 	if selectedItem == nil {
 		return "No Info"
 	}
@@ -141,20 +123,11 @@ func generateInstanceDetail(selectedItem list.Item) string {
 		return "No Info"
 	}
 
-	var (
-		sectionHeaderStyle = lipgloss.NewStyle().
-									Bold(true).
-									Foreground(lipgloss.Color("62")).
-									PaddingBottom(1)
-		labelStyle = lipgloss.NewStyle().
-						Foreground(lipgloss.Color("#EE6FF8"))
-	)
-
 		rows := []string{
 		headerStyle.Render("Instance Details"),
 		"",
 		sectionHeaderStyle.Render("General Info"),
-		common.KV("Instance ID", instance.InstanceID, common.WithLabelStyle(labelStyle)),
+		common.KV("Instance ID", instance.InstanceID),
 		common.KV("Name", instance.Name),
 		common.KV("Instance Type", instance.InstanceType),
 		common.KV("State", instance.State),
