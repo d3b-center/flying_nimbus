@@ -20,14 +20,6 @@ const (
 	runtimeStatsInterval = 5 * time.Second
 )
 
-// NavigateMsg tells the RootModel to push a new screen onto the stack.
-type NavigateMsg struct {
-	Model tea.Model
-}
-
-// BackMsg tells the RootModel to pop the current screen.
-type BackMsg struct{}
-
 func InitRoot(appService *app.App) RootModel {
 	stack := make([]tea.Model, 0, 3)
 
@@ -38,8 +30,9 @@ func InitRoot(appService *app.App) RootModel {
 	stack = append(stack, NewProvidersModel(appService))
 
 	return RootModel{
-		appService: appService,
-		stack:      stack,
+		appService:     appService,
+		stack:          stack,
+		showDevConsole: false,
 	}
 
 }
@@ -47,8 +40,11 @@ func InitRoot(appService *app.App) RootModel {
 type RootModel struct {
 	appService *app.App
 	// Might need for mutex locks
-	stack          []tea.Model
-	showDevConsole bool
+	stack             []tea.Model
+	showDevConsole    bool
+	WindowSize        tea.WindowSizeMsg
+	ContentWindowSize common.ContentWindowSizeMsg
+	devConsoleHeight  int
 }
 
 func (m RootModel) Init() tea.Cmd {
@@ -63,17 +59,13 @@ func (m RootModel) View() string {
 	current := m.stack[len(m.stack)-1]
 	content := current.View()
 
-	if !m.showDevConsole {
-		return content
-	}
 	if constants.WindowSize.Width == 0 || constants.WindowSize.Height == 0 {
 		return content
 	}
 
-	contentHeight := contentHeight(constants.WindowSize.Height, true)
-	consoleHeight := devConsoleHeight(constants.WindowSize.Height)
-	if consoleHeight <= 0 {
-		return content
+	consoleHeight := m.devConsoleHeight
+	if !m.showDevConsole {
+		consoleHeight = 0
 	}
 
 	var lines []string
@@ -82,30 +74,42 @@ func (m RootModel) View() string {
 	}
 	consoleView := common.RenderDevConsole(lines, constants.WindowSize.Width, consoleHeight)
 
-	contentView := lipgloss.NewStyle().
-		Width(constants.WindowSize.Width).
-		Height(contentHeight).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Top, contentView, consoleView)
+	return lipgloss.JoinVertical(lipgloss.Top, content, consoleView)
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
-		constants.WindowSize = msg
-	case NavigateMsg:
+		slog.Info("window resize",
+			slog.Int("width", msg.Width),
+			slog.Int("height", msg.Height),
+		)
+
+		window, content, devHeight := computeLayout(msg, m.showDevConsole)
+
+		constants.WindowSize = tea.WindowSizeMsg{
+			Height: content.Height,
+			Width:  content.Width,
+		}
+		m.WindowSize = window
+		m.ContentWindowSize = content
+		m.devConsoleHeight = devHeight
+		return m, func() tea.Msg {
+			return content
+		}
+
+	case common.NavigateMsg:
 		m.stack = append(m.stack, msg.Model)
 		m.logNavigation("push", msg.Model)
-		return m, tea.Batch(msg.Model.Init(), m.syncWindowSize())
+		return m, tea.Batch(msg.Model.Init())
 
-	case BackMsg:
+	case common.BackMsg:
 		if len(m.stack) > 1 {
 			m.logNavigation("pop", m.stack[len(m.stack)-1])
 			m.stack = m.stack[:len(m.stack)-1]
 		}
-		return m, m.syncWindowSize()
+		return m, nil
 	case runtimeStatsMsg:
 		m.logRuntimeStats()
 		return m, runtimeStatsCmd()
@@ -113,28 +117,37 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, constants.Keymap.Back):
 			return m, func() tea.Msg {
-				return BackMsg{}
+				return common.BackMsg{}
 			}
 		case key.Matches(msg, constants.Keymap.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, constants.Keymap.ToggleDevConsole):
 			m.showDevConsole = !m.showDevConsole
-			return m, m.syncWindowSize()
+
+			_, content, devHeight := computeLayout(
+				tea.WindowSizeMsg(m.WindowSize),
+				m.showDevConsole,
+			)
+
+			m.devConsoleHeight = devHeight
+			m.ContentWindowSize = content
+
+			constants.WindowSize = tea.WindowSizeMsg{
+				Height: content.Height,
+				Width:  content.Width,
+			}
+			return m, tea.Batch(func() tea.Msg {
+				return content
+			})
 		}
 	}
 
 	// delegate everything else
 	current := m.stack[len(m.stack)-1]
 	delegateMsg := msg
-	if size, ok := msg.(tea.WindowSizeMsg); ok {
-		if m.showDevConsole {
-			size.Height = contentHeight(size.Height, true)
-		}
-		delegateMsg = size
-	}
 	next, cmd := current.Update(delegateMsg)
 	m.stack[len(m.stack)-1] = next
-	return m, cmd
+	return m, tea.Batch(cmd)
 }
 
 type runtimeStatsMsg struct{}
@@ -147,40 +160,23 @@ func runtimeStatsCmd() tea.Cmd {
 }
 
 // devConsoleHeight computes the fixed dev console height from total height.
-func devConsoleHeight(fullHeight int) int {
+func devConsoleHeight(fullHeight int, showDevConsole bool) int {
+	if !showDevConsole {
+		return 0
+	}
+
 	if fullHeight <= 0 {
 		return 0
 	}
+
+	if devConsoleRatio >= 1.0 {
+		slog.Error("Dev Console Height Ratio cannot be greater than 1")
+	}
+
 	height := int(float64(fullHeight) * devConsoleRatio)
-	if height < minDevConsoleHeight {
-		height = minDevConsoleHeight
-	}
-	if height >= fullHeight {
-		height = fullHeight - 1
-	}
-	if height < 0 {
-		height = 0
-	}
+	height = max(minDevConsoleHeight, height)
+
 	return height
-}
-
-// contentHeight returns remaining height for the main view.
-func contentHeight(fullHeight int, showDevConsole bool) int {
-	if !showDevConsole {
-		return fullHeight
-	}
-	return fullHeight - devConsoleHeight(fullHeight)
-}
-
-// syncWindowSize replays the latest terminal size to the active model.
-func (m RootModel) syncWindowSize() tea.Cmd {
-	if constants.WindowSize.Width == 0 || constants.WindowSize.Height == 0 {
-		return nil
-	}
-
-	return func() tea.Msg {
-		return constants.WindowSize
-	}
 }
 
 // logNavigation emits structured navigation events for the dev console.
@@ -226,4 +222,41 @@ func attrsToAny(attrs []slog.Attr) []any {
 		out[i] = attr
 	}
 	return out
+}
+
+// computeLayout calculates the effective window and content dimensions for the TUI.
+//
+// It accounts for:
+//   - The outer document frame (from constants.DocStyle)
+//   - An optional developer console at the bottom
+//
+// The returned values are:
+//  1. tea.WindowSizeMsg representing the usable window size (frame removed)
+//  2. common.ContentWindowSizeMsg representing the space available to child views
+//  3. The computed developer console height
+//
+// RootModel uses this helper to centralize layout math so resizing logic remains
+// consistent across window resize events and UI toggles.
+func computeLayout(
+	msg tea.WindowSizeMsg,
+	showDevConsole bool,
+) (tea.WindowSizeMsg, common.ContentWindowSizeMsg, int) {
+	hFrame, wFrame := constants.DocStyle.GetFrameSize()
+
+	usableHeight := msg.Height - hFrame
+	usableWidth := msg.Width - wFrame
+
+	devHeight := devConsoleHeight(usableHeight, showDevConsole)
+
+	content := common.ContentWindowSizeMsg{
+		Width:  usableWidth,
+		Height: usableHeight - devHeight,
+	}
+
+	window := tea.WindowSizeMsg{
+		Width:  usableWidth,
+		Height: usableHeight,
+	}
+
+	return window, content, devHeight
 }
