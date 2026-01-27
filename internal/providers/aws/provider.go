@@ -23,6 +23,11 @@ func (m AwsProviderModel) View() string {
 }
 
 func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		top, right, bottom, left := constants.DocStyle.GetMargin()
+		m.menu.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
+	}
 
 	var cmd tea.Cmd
 	m.menu, cmd = m.menu.Update(msg)
@@ -59,8 +64,6 @@ func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.Title = "Select Capability"
-	h, v := constants.DocStyle.GetFrameSize()
-	l.SetSize(constants.WindowSize.Width-h, constants.WindowSize.Height-v)
 	return AwsProviderModel{
 		app:  appService,
 		menu: l,

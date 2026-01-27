@@ -8,7 +8,7 @@ import (
 
 func StartTea(app *app.App) error {
 
-	m := InitRoot()
+	m := InitRoot(app)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

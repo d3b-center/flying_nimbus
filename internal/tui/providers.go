@@ -34,7 +34,7 @@ func NewProvidersModel(application *app.App) ProvidersModel {
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Select Provider!!"
+	l.Title = "Select Provider"
 
 	return ProvidersModel{
 		app:  application,
@@ -53,7 +53,6 @@ func (m ProvidersModel) View() string {
 func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		constants.WindowSize = msg
 		top, right, bottom, left := constants.DocStyle.GetMargin()
 		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
 	case tea.KeyMsg:
