@@ -25,11 +25,6 @@ var (
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(0, 1)
-
-	headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("62")).
-			Foreground(lipgloss.Color("230")).
-			Padding(0, 1)
 )
 
 type RdsViewModel struct {
@@ -146,19 +141,21 @@ func generateInstanceDetail(selectedItem list.Item) string {
 	}
 
 	var (
+		headerStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("62")).
+				Foreground(lipgloss.Color("230")).
+				Padding(0, 1)
 		sectionHeaderStyle = lipgloss.NewStyle().
 					Bold(true).
 					Foreground(lipgloss.Color("62")).
 					PaddingBottom(1)
-		labelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#EE6FF8"))
 	)
 
 	rows := []string{
 		headerStyle.Render("Instance Details"),
 		"",
 		sectionHeaderStyle.Render("General Info"),
-		common.KV("DB Identifier", rds.Id, common.WithLabelStyle(labelStyle)),
+		common.KV("DB Identifier", rds.Id),
 		common.KV("Engine", rds.DbEngine),
 		common.KV("Version", rds.DbVersion),
 		common.KV("Instance Class", rds.InstanceClass),
