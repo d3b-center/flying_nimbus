@@ -4,6 +4,7 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
@@ -24,6 +25,11 @@ var (
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(0, 1)
+
+	headerStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("62")).
+			Foreground(lipgloss.Color("230")).
+			Padding(0, 1)
 )
 
 type RdsViewModel struct {
@@ -139,28 +145,37 @@ func generateInstanceDetail(selectedItem list.Item) string {
 		return "No Info"
 	}
 
+	var (
+		sectionHeaderStyle = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("62")).
+					PaddingBottom(1)
+		labelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#EE6FF8"))
+	)
+
 	rows := []string{
-		"Instance Details",
-		"\n",
-		"General Info",
-		fmt.Sprintf("DB Identifier:    %s", rds.Id),
-		fmt.Sprintf("Engine:           %s", rds.DbEngine),
-		fmt.Sprintf("Version:          %s", rds.DbVersion),
-		fmt.Sprintf("Instance Class:   %s", rds.InstanceClass),
-		fmt.Sprintf("Status:           %s", rds.Status),
-		fmt.Sprintf("Total Storage:    %d", rds.AllocatedStorage),
-		fmt.Sprintf("Endpoint:         %s", rds.Endpoint),
-		fmt.Sprintf("Port:             %d", rds.Port),
-		fmt.Sprintf("IsPublic:         %t", rds.IsPubliclyAccessible),
-		"\n",
-		"Network",
-		fmt.Sprintf("VPC:			   %s", rds.VpcID),
-		fmt.Sprintf("Subnets:          %s", ""),
-		"\n",
-		"Metrics",
-		fmt.Sprintf("CPU Utilization:  %s", "Noop"),
-		fmt.Sprintf("Free Storage:     %s", "Noop"),
-		fmt.Sprintf("Connections:      %s", "Noop"),
+		headerStyle.Render("Instance Details"),
+		"",
+		sectionHeaderStyle.Render("General Info"),
+		common.KV("DB Identifier", rds.Id, common.WithLabelStyle(labelStyle)),
+		common.KV("Engine", rds.DbEngine),
+		common.KV("Version", rds.DbVersion),
+		common.KV("Instance Class", rds.InstanceClass),
+		common.KV("Status", rds.Status),
+		common.KV("Total Storage", fmt.Sprintf("%d GiB", rds.AllocatedStorage)),
+		common.KV("Endpoint", rds.Endpoint),
+		common.KV("Port", fmt.Sprintf("%d", rds.Port)),
+		common.KV("Is Public", fmt.Sprintf("%t", rds.IsPubliclyAccessible)),
+		"",
+		sectionHeaderStyle.Render("Network"),
+		common.KV("VPC", rds.VpcID),
+		common.KV("Subnets", ""),
+		"",
+		sectionHeaderStyle.Render("Metrics"),
+		common.KV("CPU Utilization", "Noop"),
+		common.KV("Free Storage", "Noop"),
+		common.KV("Connections", "Noop"),
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
