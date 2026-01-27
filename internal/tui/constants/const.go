@@ -11,9 +11,10 @@ var WindowSize tea.WindowSizeMsg
 var DocStyle = lipgloss.NewStyle().Margin(2, 2)
 
 type keymap struct {
-	Enter key.Binding
-	Back  key.Binding
-	Quit  key.Binding
+	Enter            key.Binding
+	Back             key.Binding
+	Quit             key.Binding
+	ToggleDevConsole key.Binding
 }
 
 // Keymap reusable key mappings shared across models
@@ -29,5 +30,9 @@ var Keymap = keymap{
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c", "q"),
 		key.WithHelp("ctrl+c/q", "quit"),
+	),
+	ToggleDevConsole: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "toggle dev console"),
 	),
 }

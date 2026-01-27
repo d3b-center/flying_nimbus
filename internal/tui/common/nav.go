@@ -6,6 +6,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// NavigateMsg tells the RootModel to push a new screen onto the stack.
+type NavigateMsg struct {
+	Model tea.Model
+}
+
+// BackMsg tells the RootModel to pop the current screen.
+type BackMsg struct{}
+
+type ContentWindowSizeMsg struct {
+	Width  int
+	Height int
+}
+
 type NavItem struct {
 	title string
 	desc  string

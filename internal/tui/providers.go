@@ -5,6 +5,7 @@ import (
 	"flying_nimbus/internal/providers/aws"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,8 +34,8 @@ func NewProvidersModel(application *app.App) ProvidersModel {
 		),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Select Provider!!"
+	l := list.New(items, list.NewDefaultDelegate(), constants.WindowSize.Width, constants.WindowSize.Height)
+	l.Title = "Select Provider"
 
 	return ProvidersModel{
 		app:  application,
@@ -47,21 +48,20 @@ func (m ProvidersModel) Init() tea.Cmd {
 }
 
 func (m ProvidersModel) View() string {
-	return constants.DocStyle.Render(m.list.View() + "\n")
+	m.list.SetSize(constants.WindowSize.Width, constants.WindowSize.Height)
+	return m.list.View() + "\n"
 }
 
 func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		constants.WindowSize = msg
-		top, right, bottom, left := constants.DocStyle.GetMargin()
-		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
+	case common.ContentWindowSizeMsg:
+		m.list.SetSize(msg.Width, msg.Height)
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
+		switch {
+		case key.Matches(msg, constants.Keymap.Enter):
 			item := m.list.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
-				return NavigateMsg{
+				return common.NavigateMsg{
 					Model: item.Model(m.app),
 				}
 			}
