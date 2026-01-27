@@ -34,7 +34,7 @@ func NewProvidersModel(application *app.App) ProvidersModel {
 		),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, list.NewDefaultDelegate(), constants.WindowSize.Width, constants.WindowSize.Height)
 	l.Title = "Select Provider"
 
 	return ProvidersModel{
@@ -48,14 +48,14 @@ func (m ProvidersModel) Init() tea.Cmd {
 }
 
 func (m ProvidersModel) View() string {
-	return constants.DocStyle.Render(m.list.View() + "\n")
+	m.list.SetSize(constants.WindowSize.Width, constants.WindowSize.Height)
+	return m.list.View() + "\n"
 }
 
 func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		top, right, bottom, left := constants.DocStyle.GetMargin()
-		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
+	case common.ContentWindowSizeMsg:
+		m.list.SetSize(msg.Width, msg.Height)
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, constants.Keymap.Enter):

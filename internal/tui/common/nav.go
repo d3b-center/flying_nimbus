@@ -14,6 +14,11 @@ type NavigateMsg struct {
 // BackMsg tells the RootModel to pop the current screen.
 type BackMsg struct{}
 
+type ContentWindowSizeMsg struct {
+	Width  int
+	Height int
+}
+
 type NavItem struct {
 	title string
 	desc  string

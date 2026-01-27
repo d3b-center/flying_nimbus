@@ -28,10 +28,13 @@ var (
 )
 
 type RdsViewModel struct {
-	app       *app.App
-	list      list.Model
-	loader    spinner.Model
-	isLoading bool
+	app               *app.App
+	list              list.Model
+	loader            spinner.Model
+	isLoading         bool
+	windowSize        common.ContentWindowSizeMsg
+	instanceListWidth int
+	detailsWidth      int
 }
 
 type (
@@ -48,17 +51,28 @@ func InitRdsViewModel(appService *app.App) RdsViewModel {
 	l.SetShowHelp(false)
 
 	//h, v := constants.DocStyle.GetFrameSize()
-	//l.SetSize((constants.WindowSize.Width-h)/3, constants.WindowSize.Height-v)
+
+	windowSize := common.ContentWindowSizeMsg{
+		Height: constants.WindowSize.Height,
+		Width:  constants.WindowSize.Width,
+	}
+	instanceListWidth := windowSize.Width / 3
+	detailsWidth := windowSize.Width - instanceListWidth
+
+	l.SetSize((constants.WindowSize.Width)/3, constants.WindowSize.Height)
 
 	loader := spinner.New()
 	loader.Style = spinnerStyle
 	loader.Spinner = spinner.Dot
 
 	return RdsViewModel{
-		app:       appService,
-		loader:    loader,
-		list:      l,
-		isLoading: true,
+		app:               appService,
+		loader:            loader,
+		list:              l,
+		isLoading:         true,
+		windowSize:        windowSize,
+		instanceListWidth: instanceListWidth,
+		detailsWidth:      detailsWidth,
 	}
 }
 
@@ -78,18 +92,11 @@ func (m RdsViewModel) View() string {
 	if m.isLoading {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
+	slog.Debug(fmt.Sprintf("List Height %d", m.list.Height()))
+	slog.Debug(fmt.Sprintf("Height %d", m.windowSize.Height))
 
-	w, h := constants.DocStyle.GetFrameSize()
-	contentWidth := constants.WindowSize.Width - w
-	contentHeight := constants.WindowSize.Height - h
-
-	instanceListWidth := contentWidth / 3
-	detailsWidth := contentWidth - instanceListWidth
-
-	m.list.SetSize(instanceListWidth, contentHeight)
-
-	left := instancesListStyle.Width(instanceListWidth).Height(contentHeight).Render(m.list.View())
-	right := instanceDetailStyle.Width(detailsWidth).Height(contentHeight).Render(generateInstanceDetail(m.list.SelectedItem()))
+	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
+	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem()))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
@@ -98,17 +105,14 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	slog.Debug(fmt.Sprintf("%v", msg))
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	// TODO: This should be a custom WindowSizeMsg from Root
-	case tea.WindowSizeMsg:
+	case common.ContentWindowSizeMsg:
 		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
-		constants.WindowSize = msg
 
-		h, v := constants.DocStyle.GetFrameSize()
+		m.windowSize = msg
+		m.instanceListWidth = msg.Width / 3
+		m.detailsWidth = msg.Width - m.instanceListWidth
 
-		contentWidth := msg.Width - h
-		contentHeight := msg.Height - v
-
-		m.list.SetSize(contentWidth, contentHeight)
+		m.list.SetSize(m.instanceListWidth, msg.Height)
 	case rdsInstancesLoadedMsg:
 		m.isLoading = false
 		m.list.SetItems(msg)
