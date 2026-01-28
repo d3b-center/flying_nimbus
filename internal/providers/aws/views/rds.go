@@ -27,6 +27,9 @@ var (
 				Padding(0, 1)
 )
 
+const instanceListWidthRatio = 0.25
+
+// RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
 type RdsViewModel struct {
 	app               *app.App
 	list              list.Model
@@ -35,10 +38,13 @@ type RdsViewModel struct {
 	windowSize        common.ContentWindowSizeMsg
 	instanceListWidth int
 	detailsWidth      int
+	sgs               map[string]*aws.SecurityGroup
 }
 
+// Messages returned from async commands.
 type (
-	rdsInstancesLoadedMsg []list.Item
+	rdsInstancesLoadedMsg   []list.Item
+	securityGroupsLoadedMsg map[string]*aws.SecurityGroup
 )
 
 func InitRdsViewModel(appService *app.App) RdsViewModel {
@@ -50,37 +56,43 @@ func InitRdsViewModel(appService *app.App) RdsViewModel {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 
-	//h, v := constants.DocStyle.GetFrameSize()
-
 	windowSize := common.ContentWindowSizeMsg{
 		Height: constants.WindowSize.Height,
 		Width:  constants.WindowSize.Width,
 	}
-	instanceListWidth := windowSize.Width / 3
-	detailsWidth := windowSize.Width - instanceListWidth
-
-	l.SetSize((constants.WindowSize.Width)/3, constants.WindowSize.Height)
 
 	loader := spinner.New()
 	loader.Style = spinnerStyle
 	loader.Spinner = spinner.Dot
 
-	return RdsViewModel{
-		app:               appService,
-		loader:            loader,
-		list:              l,
-		isLoading:         true,
-		windowSize:        windowSize,
-		instanceListWidth: instanceListWidth,
-		detailsWidth:      detailsWidth,
+	m := RdsViewModel{
+		app:        appService,
+		loader:     loader,
+		list:       l,
+		isLoading:  true,
+		windowSize: windowSize,
 	}
+	m.updateLayout(windowSize)
+
+	return m
 }
 
+// fetchRdsInstancesCmd returns a command that fetches all RDS instances asynchronously.
 func fetchRdsInstancesCmd(ctx context.Context, rdsService *aws.RdsService) tea.Cmd {
 	return func() tea.Msg {
 		dbs, _ := rdsService.ListDBInstances(ctx)
 		return rdsInstancesLoadedMsg(dbInstancesToItems(dbs))
 	}
+}
+
+// fetchSecurityGroupsCmd returns a command that fetches the details of specified security groups.
+func fetchSecurityGroupsCmd(ctx context.Context, sgService *aws.SgService, sgIds []string) tea.Cmd {
+	slog.Debug(fmt.Sprintf("📤 Sending cmd fetchSecurityGroups SGIds #%d", len(sgIds)))
+	return func() tea.Msg {
+		sgs, _ := sgService.DescribeSecurityGroupRules(ctx, sgIds)
+		return securityGroupsLoadedMsg(sgs)
+	}
+
 }
 
 func (m RdsViewModel) Init() tea.Cmd {
@@ -92,31 +104,30 @@ func (m RdsViewModel) View() string {
 	if m.isLoading {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
-	slog.Debug(fmt.Sprintf("List Height %d", m.list.Height()))
-	slog.Debug(fmt.Sprintf("Height %d", m.windowSize.Height))
 
 	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem()))
+	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	slog.Debug(fmt.Sprintf("%v", msg))
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
-		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
-
 		m.windowSize = msg
-		m.instanceListWidth = msg.Width / 3
-		m.detailsWidth = msg.Width - m.instanceListWidth
+		m.updateLayout(msg)
 
-		m.list.SetSize(m.instanceListWidth, msg.Height)
 	case rdsInstancesLoadedMsg:
-		m.isLoading = false
 		m.list.SetItems(msg)
-		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
+		slog.Debug(fmt.Sprintf("📥 Rcv'd Rds Instances... # of Rds' %d", len(m.list.Items())))
+		cmd = fetchSecurityGroupsCmd(m.app.Context, m.app.AWS.Sg, gatherSecurityGroupIds(msg))
+
+	case securityGroupsLoadedMsg:
+		slog.Debug(fmt.Sprintf("📥 Rcv'd SG Details' %d", len(msg)))
+		m.isLoading = false
+		m.sgs = msg
+
 	case spinner.TickMsg:
 		m.loader, cmd = m.loader.Update(msg)
 	default:
@@ -125,6 +136,17 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// updateLayout recalculates pane widths based on the current window size.
+func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
+	m.windowSize = msg
+
+	m.instanceListWidth = int(float64(msg.Width) * instanceListWidthRatio)
+	m.detailsWidth = msg.Width - m.instanceListWidth
+
+	m.list.SetSize(m.instanceListWidth, msg.Height)
+}
+
+// dbInstancesToItems converts a slice of RDS instances to list.Items.
 func dbInstancesToItems(dbs []aws.RDSInstance) []list.Item {
 	items := make([]list.Item, len(dbs))
 	for i, db := range dbs {
@@ -133,7 +155,32 @@ func dbInstancesToItems(dbs []aws.RDSInstance) []list.Item {
 	return items
 }
 
-func generateInstanceDetail(selectedItem list.Item) string {
+// gatherSecurityGroupIds extracts unique SG IDs from a list of RDS instances.
+func gatherSecurityGroupIds(items []list.Item) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0)
+
+	for _, rawItem := range items {
+		rds, ok := rawItem.(aws.RDSInstance)
+		if !ok {
+			slog.Error("failed to convert to aws.RDSInstance")
+			continue
+		}
+
+		for _, sgID := range rds.SecurityGroupIds {
+			if _, exists := seen[sgID]; exists {
+				continue
+			}
+			seen[sgID] = struct{}{}
+			out = append(out, sgID)
+		}
+	}
+
+	return out
+}
+
+// generateInstanceDetail generates the detail panel for a selected RDS instance.
+func generateInstanceDetail(selectedItem list.Item, sgs map[string]*aws.SecurityGroup) string {
 	// Skeleton detail sections
 	if selectedItem == nil {
 		return "No Info"
@@ -173,11 +220,97 @@ func generateInstanceDetail(selectedItem list.Item) string {
 		common.KV("VPC", rds.VpcID),
 		common.KV("Subnets", ""),
 		"",
-		sectionHeaderStyle.Render("Metrics"),
-		common.KV("CPU Utilization", "Noop"),
-		common.KV("Free Storage", "Noop"),
-		common.KV("Connections", "Noop"),
 	}
 
+	rows = append(rows, securityGroupRulesSection(rds.SecurityGroupIds, sgs, sectionHeaderStyle)...)
+
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+// formatSecurityGroupRule returns a formatted string representation of a security group rule.
+func formatSecurityGroupRule(r aws.SecurityGroupRule) string {
+	trafficDirection := "INGRESS"
+	if r.IsEgress {
+		trafficDirection = "EGRESS"
+	}
+
+	port := "all"
+	if r.FromPort != 0 || r.ToPort != 0 {
+		if r.FromPort == r.ToPort {
+			port = fmt.Sprintf("%d", r.FromPort)
+		} else {
+			port = fmt.Sprintf("%d-%d", r.FromPort, r.ToPort)
+		}
+	}
+
+	target := r.CidrIpv4
+	if target == "" && r.ReferencedSGId != "" {
+		target = "" + r.ReferencedSGId
+	}
+	if target == "" {
+		target = "-"
+	}
+
+	desc := r.Description
+	if desc == "" {
+		desc = "-"
+	}
+
+	ipProtocol := "all"
+	if r.IpProtocol != "-1" {
+		ipProtocol = r.IpProtocol
+	}
+
+	return fmt.Sprintf(
+		"  ‣ %-7s %-5s %-8s → %-18s %s",
+		trafficDirection,
+		ipProtocol,
+		port,
+		target,
+		desc,
+	)
+}
+
+// flattenSecurityGroupRules returns all rules for the given SG IDs.
+func flattenSecurityGroupRules(
+	sgIds []string,
+	securityGroups map[string]*aws.SecurityGroup,
+) []aws.SecurityGroupRule {
+
+	var out []aws.SecurityGroupRule
+
+	for _, sgID := range sgIds {
+		sg, ok := securityGroups[sgID]
+		if !ok {
+			continue
+		}
+		out = append(out, sg.Rules...)
+	}
+
+	return out
+}
+
+// securityGroupRulesSection generates the Security Group Rules section for the details panel.
+func securityGroupRulesSection(
+	sgIds []string,
+	securityGroups map[string]*aws.SecurityGroup,
+	sectionHeaderStyle lipgloss.Style,
+) []string {
+
+	rows := []string{
+		sectionHeaderStyle.Render("Security Group Rules"),
+	}
+
+	rules := flattenSecurityGroupRules(sgIds, securityGroups)
+
+	if len(rules) == 0 {
+		rows = append(rows, "  (no rules)")
+		return rows
+	}
+
+	for _, rule := range rules {
+		rows = append(rows, formatSecurityGroupRule(rule))
+	}
+
+	return rows
 }

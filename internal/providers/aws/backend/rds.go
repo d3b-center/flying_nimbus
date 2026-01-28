@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+// RDSInstance represents a simplified, UI-friendly view of an AWS RDS instance.
 type RDSInstance struct {
 	Id                   string
 	Endpoint             string
@@ -37,24 +38,28 @@ func (i RDSInstance) Description() string {
 	}
 	return status
 }
+
 func (i RDSInstance) FilterValue() string { return i.Id }
 
+// rdsAPI abstracts the AWS RDS API used by RdsService.
 type rdsAPI interface {
 	DescribeDBInstances(ctx context.Context, params *rds.DescribeDBInstancesInput, opts ...func(*rds.Options)) (*rds.DescribeDBInstancesOutput, error)
 }
 
+// RdsService provides read-only access to AWS RDS metadata.
 type RdsService struct {
 	api rdsAPI
 }
 
 func InitRdsService(cfg aws.Config) *RdsService {
 	slog.Debug("Initializing RDS Service")
-	client := rds.NewFromConfig(cfg)
 	return &RdsService{
-		api: client,
+		api: rds.NewFromConfig(cfg),
 	}
 }
 
+// ListDBInstances returns all RDS DB instances visible to the caller.
+// The results are mapped into domain-friendly RDSInstance structs.
 func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error) {
 	slog.Debug("Attempting to request DBs")
 	rawDBInstances, err := s.api.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{})
@@ -68,16 +73,16 @@ func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error)
 
 	for i, db := range rawDBInstances.DBInstances {
 		instance := RDSInstance{
-			Id:                   *db.DBInstanceIdentifier,
-			Endpoint:             *db.Endpoint.Address,
-			Port:                 *db.Endpoint.Port,
-			Status:               *db.DBInstanceStatus,
-			DbEngine:             *db.Engine,
-			DbVersion:            *db.EngineVersion,
-			InstanceClass:        *db.DBInstanceClass,
-			VpcID:                *db.DBSubnetGroup.VpcId,
-			IsPubliclyAccessible: *db.PubliclyAccessible,
-			AllocatedStorage:     *db.AllocatedStorage,
+			Id:                   aws.ToString(db.DBInstanceIdentifier),
+			Endpoint:             aws.ToString(db.Endpoint.Address),
+			Port:                 aws.ToInt32(db.Endpoint.Port),
+			Status:               aws.ToString(db.DBInstanceStatus),
+			DbEngine:             aws.ToString(db.Engine),
+			DbVersion:            aws.ToString(db.EngineVersion),
+			InstanceClass:        aws.ToString(db.DBInstanceClass),
+			VpcID:                aws.ToString(db.DBSubnetGroup.VpcId),
+			IsPubliclyAccessible: aws.ToBool(db.PubliclyAccessible),
+			AllocatedStorage:     aws.ToInt32(db.AllocatedStorage),
 			SecurityGroupIds:     getSecurityGroupIds(db.VpcSecurityGroups),
 		}
 		slog.Debug(fmt.Sprintf("DBs %v", instance))
@@ -87,10 +92,12 @@ func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error)
 	return instances, nil
 }
 
+// getSecurityGroupIds extracts security group IDs from
+// VpcSecurityGroupMembership records.
 func getSecurityGroupIds(rawSGs []types.VpcSecurityGroupMembership) []string {
 	securityGroups := make([]string, len(rawSGs))
 	for i, sg := range rawSGs {
-		securityGroups[i] = *sg.VpcSecurityGroupId
+		securityGroups[i] = aws.ToString(sg.VpcSecurityGroupId)
 	}
 	return securityGroups
 }
