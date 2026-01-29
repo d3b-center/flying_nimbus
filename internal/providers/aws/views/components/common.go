@@ -2,18 +2,23 @@ package components
 
 import (
 	"fmt"
+	"log/slog"
+	"encoding/json"
 	"flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 )
 
 func GenerateTagRows(tags map[string]string) []string {
 	var rows []string
+	debug, _ := json.Marshal(tags)
+	slog.Debug(string(debug))
 
 	if len(tags) == 0 {
 		return append(rows, "  None")
 	}
 
 	for key, value := range tags {
+		slog.Debug("Appending tag", "key", key, "value", value)
 		if key != "Name" { // Skip Name tag since it's already shown
 			rows = append(rows, common.KV("  "+key, value))
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 
@@ -22,6 +23,9 @@ type Ec2ViewModel struct {
 	list list.Model
 	loader spinner.Model
 	isLoading bool
+	instanceDetail string
+	detailsFocused bool
+	detailsViewport viewport.Model
 	windowSize common.ContentWindowSizeMsg
 	instanceListWidth int
 	detailsWidth int
@@ -43,13 +47,17 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 
 	loader := spinner.New()
 	loader.Style = spinnerStyle
-	loader.Spinner = spinner.Dot
+	loader.Spinner = spinner.Points
+
+	vp := viewport.New(0,0)
 
 	return Ec2ViewModel{
 		app: appService,
 		list: l,
 		loader: loader,
 		isLoading: true,
+		detailsFocused: false,
+		detailsViewport: vp,
 	}
 }
 
@@ -79,14 +87,26 @@ func (m Ec2ViewModel) View() string {
 
 	m.list.SetSize(instanceListWidth, contentHeight)
 
-	left := instancesListStyle.Width(instanceListWidth).Height(contentHeight).Render(m.list.View())
-	right := instanceDetailStyle.Width(detailsWidth).Height(contentHeight).Render(generateEc2InstanceDetail(m.list.SelectedItem()))
+	left := instancesListStyle.
+		Width(instanceListWidth).
+		Height(contentHeight).
+		MaxHeight(contentHeight). 
+		Render(m.list.View())
+		
+	right := instanceDetailStyle.
+		Width(detailsWidth).
+		Height(contentHeight).
+		MaxHeight(contentHeight).
+		Render(m.instanceDetail)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	prevIndex := m.list.Index()
+
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
 		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
@@ -99,12 +119,19 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ec2InstancesLoadedMsg:
 		m.isLoading = false
 		m.list.SetItems(msg)
+		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
 	case spinner.TickMsg:
 		m.loader, cmd = m.loader.Update(msg)
 	default:
 		m.list, cmd = m.list.Update(msg)
 	}
+
+	if m.list.Index() != prevIndex {
+		slog.Debug("Selection changed, regenerating detail", "index", m.list.Index())
+		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
+	}
+
 	return m, cmd
 }
 
