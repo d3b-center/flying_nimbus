@@ -3,16 +3,19 @@ package aws
 import (
 	"context"
 	"time"
+	"strconv"
 	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 type Ec2Instance struct {
 	InstanceID             string
 	Name                   string
 	InstanceType           string
+	AmiImage               string
 	State                  string
 	PrivateIP              string
 	PublicIP               string
@@ -21,10 +24,19 @@ type Ec2Instance struct {
 	SubnetID               string
 	IamInstanceProfile     string
 	LaunchTime             string
+	Volumes                []EbsVolume
+	SecurityGroups         []SecurityGroup
+}
+
+type EbsVolume struct {
+	VolumeID string
+	Size     string
+	StorageType string
 }
 
 type ec2API interface {
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFuncs...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error)
 }
 
 type Ec2Service struct {
@@ -49,6 +61,28 @@ func InitEc2Service(cfg aws.Config) *Ec2Service {
 	return &Ec2Service{
 		api: client,
 	}
+}
+
+func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([]EbsVolume, error) {
+    input := &ec2.DescribeVolumesInput{
+        VolumeIds: volumeIDs,
+    }
+    
+    result, err := e.api.DescribeVolumes(ctx, input)
+    if err != nil {
+        return nil, err
+    }
+    
+    var volumes []EbsVolume
+    for _, vol := range result.Volumes {
+        volumes = append(volumes, EbsVolume{
+            VolumeID: aws.ToString(vol.VolumeId),
+            Size:     strconv.Itoa(int(aws.ToInt32(vol.Size))),
+            StorageType: string(vol.VolumeType),
+        })
+    }
+    
+    return volumes, nil
 }
 
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
@@ -76,6 +110,14 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 					}
 				}
 
+
+				var securityGroups []SecurityGroup
+				for _, sg := range instance.SecurityGroups {
+					if sg.GroupId != nil {
+						securityGroups = append(securityGroups, SecurityGroup{Id: *sg.GroupId})
+					}
+				}
+
 				iamProfile := ""
 				if instance.IamInstanceProfile != nil && instance.IamInstanceProfile.Arn != nil {
 					iamProfile = *instance.IamInstanceProfile.Arn
@@ -98,6 +140,8 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 					SubnetID:               aws.ToString(instance.SubnetId),
 					IamInstanceProfile :    iamProfile,
 					LaunchTime:             launchTime,
+					Volumes:      e.getEbsVolumeData(ctx, instance.BlockDeviceMappings),
+					SecurityGroups: securityGroups,
 				})
 			}
 		}
@@ -110,4 +154,21 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	}
 
 	return instances, nil
+}
+
+func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
+	var volumeIds []string
+	for _, bdm := range bdms {
+		if bdm.Ebs != nil && bdm.Ebs.VolumeId != nil {
+			volumeIds = append(volumeIds, *bdm.Ebs.VolumeId)
+		}
+	}
+
+	volumes, err := e.GetVolumeDetails(ctx, volumeIds)
+	if err != nil {
+		slog.Warn("Failed to get volume details")
+		volumes = []EbsVolume{}
+	}
+
+	return volumes
 }

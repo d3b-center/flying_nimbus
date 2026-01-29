@@ -4,6 +4,7 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
@@ -47,6 +48,8 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	return Ec2ViewModel{
 		app: appService,
 		list: l,
+		loader: loader,
+		isLoading: true,
 	}
 }
 
@@ -123,7 +126,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 		return "No Info"
 	}
 
-		rows := []string{
+	rows := []string{
 		headerStyle.Render("Instance Details"),
 		"",
 		sectionHeaderStyle.Render("General Info"),
@@ -139,8 +142,24 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 		common.KV("Public IP", instance.PublicIP),
 		common.KV("VPC", instance.VpcID),
 		common.KV("Subnet", instance.SubnetID),
-		
+		"",
+		sectionHeaderStyle.Render("Security Groups"),
 	}
+
+	// Add security groups
+	if len(instance.SecurityGroups) > 0 {
+		for _, sg := range instance.SecurityGroups {
+			rows = append(rows, "  • "+sg.Id)
+		}
+	} else {
+		rows = append(rows, "  None")
+	}
+
+	rows = append(rows, "", sectionHeaderStyle.Render("EBS Volumes"))
+	rows = append(rows, components.GenerateEbsVolumeRows(instance.Volumes)...)
+	
+	rows = append(rows, "", sectionHeaderStyle.Render("Tags"))
+	rows = append(rows, components.GenerateTagRows(instance.Tags)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
