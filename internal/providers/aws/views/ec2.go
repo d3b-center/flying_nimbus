@@ -81,15 +81,11 @@ func (m Ec2ViewModel) View() string {
 	}
 
 	w, h := constants.DocStyle.GetFrameSize()
-	m.windowSize = common.ContentWindowSizeMsg{Width: w, Height: h}
 	contentWidth := constants.WindowSize.Width - w
 	contentHeight := constants.WindowSize.Height - h
 
 	instanceListWidth := contentWidth / 3
 	detailsWidth := contentWidth - instanceListWidth
-
-	// m.list.SetSize(instanceListWidth, contentHeight)
-	// m.resizeViewport(instanceListWidth, contentHeight)
 
 	listStyle := instancesListStyle.
 		Width(instanceListWidth).
@@ -140,7 +136,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 			slog.Debug("Viewport ready", "ready", m.ready)
 			
-			m.determineWindowSizes()
+			m.determineDefaultWindowSizes()
 			m.list.SetSize(m.instanceListWidth, m.contentHeight)
 			m.resizeViewport(m.detailsWidth, m.contentHeight)
 
@@ -252,7 +248,7 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	}
 }
 
-func (m *Ec2ViewModel) determineWindowSizes() {
+func (m *Ec2ViewModel) determineDefaultWindowSizes() {
 	w, h := constants.DocStyle.GetFrameSize()
 	contentWidth := constants.WindowSize.Width - w
 	contentHeight := constants.WindowSize.Height - h
