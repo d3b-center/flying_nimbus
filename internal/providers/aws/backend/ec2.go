@@ -164,10 +164,14 @@ func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceB
 		}
 	}
 
-	volumes, err := e.GetVolumeDetails(ctx, volumeIds)
-	if err != nil {
-		slog.Warn("Failed to get volume details")
-		volumes = []EbsVolume{}
+	var volumes []EbsVolume
+	var err error
+	if len(volumeIds) > 0 {
+		volumes, err = e.GetVolumeDetails(ctx, volumeIds)
+		if err != nil {
+			slog.Warn("Failed to get volume details")
+			volumes = []EbsVolume{}
+		}
 	}
 
 	return volumes

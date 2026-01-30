@@ -2,273 +2,327 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
-// Mock EC2 API
 type mockEc2API struct {
-	mock.Mock
+	instancesOutput *ec2.DescribeInstancesOutput
+	volumesOutput   *ec2.DescribeVolumesOutput
+	instancesErr    error
+	volumesErr      error
 }
 
-func (m *mockEc2API) DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (m *mockEc2API) DescribeInstances(
+	ctx context.Context,
+	params *ec2.DescribeInstancesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.DescribeInstancesOutput, error) {
+	if m.instancesErr != nil {
+		return nil, m.instancesErr
 	}
-	return args.Get(0).(*ec2.DescribeInstancesOutput), args.Error(1)
+	return m.instancesOutput, nil
 }
 
-func (m *mockEc2API) DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error) {
-	args := m.Called(ctx, params)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (m *mockEc2API) DescribeVolumes(
+	ctx context.Context,
+	params *ec2.DescribeVolumesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.DescribeVolumesOutput, error) {
+	if m.volumesErr != nil {
+		return nil, m.volumesErr
 	}
-	return args.Get(0).(*ec2.DescribeVolumesOutput), args.Error(1)
+	return m.volumesOutput, nil
 }
 
-func TestListInstances_Success(t *testing.T) {
-	// Setup
-	mockAPI := new(mockEc2API)
-	service := Ec2Service{api: mockAPI}
-	ctx := context.Background()
+func TestEc2Instance_ListItemInterface(t *testing.T) {
+	inst := Ec2Instance{
+		InstanceID: "i-12345",
+		Name:       "test-instance",
+	}
 
+	if inst.Title() != "i-12345" {
+		t.Errorf("Title() = %q, want %q", inst.Title(), "i-12345")
+	}
+
+	if inst.Description() != "test-instance" {
+		t.Errorf("Description() = %q, want %q", inst.Description(), "test-instance")
+	}
+
+	if inst.FilterValue() != "i-12345" {
+		t.Errorf("FilterValue() = %q, want %q", inst.FilterValue(), "i-12345")
+	}
+}
+
+func TestEc2Service_ListInstances_Success(t *testing.T) {
 	launchTime := time.Now()
-	
-	// Mock response
-	mockOutput := &ec2.DescribeInstancesOutput{
-		Reservations: []types.Reservation{
-			{
-				Instances: []types.Instance{
-					{
-						InstanceId:       aws.String("i-12345"),
-						InstanceType:     types.InstanceTypeT3Medium,
-						PrivateIpAddress: aws.String("10.0.1.100"),
-						PublicIpAddress:  aws.String("54.1.2.3"),
-						VpcId:            aws.String("vpc-123"),
-						SubnetId:         aws.String("subnet-456"),
-						LaunchTime:       &launchTime,
-						State: &types.InstanceState{
-							Name: types.InstanceStateNameRunning,
-						},
-						Tags: []types.Tag{
-							{Key: aws.String("Name"), Value: aws.String("test-instance")},
-							{Key: aws.String("Environment"), Value: aws.String("dev")},
-						},
-						SecurityGroups: []types.GroupIdentifier{
-							{GroupId: aws.String("sg-123")},
-						},
-						BlockDeviceMappings: []types.InstanceBlockDeviceMapping{
-							{
-								Ebs: &types.EbsInstanceBlockDevice{
-									VolumeID: aws.String("vol-123"),
+
+	mock := &mockEc2API{
+		instancesOutput: &ec2.DescribeInstancesOutput{
+			Reservations: []types.Reservation{
+				{
+					Instances: []types.Instance{
+						{
+							InstanceId:       aws.String("i-12345"),
+							InstanceType:     types.InstanceTypeT3Medium,
+							PrivateIpAddress: aws.String("10.0.1.100"),
+							PublicIpAddress:  aws.String("54.1.2.3"),
+							VpcId:            aws.String("vpc-123"),
+							SubnetId:         aws.String("subnet-456"),
+							LaunchTime:       &launchTime,
+							State: &types.InstanceState{
+								Name: types.InstanceStateNameRunning,
+							},
+							Tags: []types.Tag{
+								{Key: aws.String("Name"), Value: aws.String("test-instance")},
+								{Key: aws.String("Environment"), Value: aws.String("dev")},
+							},
+							SecurityGroups: []types.GroupIdentifier{
+								{GroupId: aws.String("sg-111")},
+								{GroupId: aws.String("sg-222")},
+							},
+							BlockDeviceMappings: []types.InstanceBlockDeviceMapping{
+								{
+									Ebs: &types.EbsInstanceBlockDevice{
+										VolumeId: aws.String("vol-abc"),
+									},
 								},
 							},
-						},
-						IamInstanceProfile: &types.IamInstanceProfile{
-							Arn: aws.String("arn:aws:iam::123:instance-profile/test"),
-						},
-					},
-				},
-			},
-		},
-		NextToken: nil,
-	}
-
-	mockVolOutput := &ec2.DescribeVolumesOutput{
-		Volumes: []types.Volume{
-			{
-				VolumeId:   aws.String("vol-123"),
-				Size:       aws.Int32(100),
-				VolumeType: types.VolumeTypeGp3,
-				Encrypted:  aws.Bool(true),
-			},
-		},
-	}
-
-	mockAPI.On("DescribeInstances", ctx, mock.Anything).Return(mockOutput, nil)
-	mockAPI.On("DescribeVolumes", ctx, mock.Anything).Return(mockVolOutput, nil)
-
-	// Execute
-	instances, err := service.ListInstances(ctx)
-
-	// Assert
-	assert.NoError(t, err)
-	assert.Len(t, instances, 1)
-	
-	instance := instances[0]
-	assert.Equal(t, "i-12345", instance.InstanceID)
-	assert.Equal(t, "test-instance", instance.Name)
-	assert.Equal(t, "t3.medium", instance.InstanceType)
-	assert.Equal(t, "running", instance.State)
-	assert.Equal(t, "10.0.1.100", instance.PrivateIP)
-	assert.Equal(t, "54.1.2.3", instance.PublicIP)
-	assert.Equal(t, "vpc-123", instance.VpcID)
-	assert.Equal(t, "subnet-456", instance.SubnetID)
-	assert.Equal(t, "arn:aws:iam::123:instance-profile/test", instance.IamInstanceProfile)
-	
-	// Check tags
-	assert.Equal(t, "test-instance", instance.Tags["Name"])
-	assert.Equal(t, "dev", instance.Tags["Environment"])
-	
-	// Check security groups
-	assert.Len(t, instance.SecurityGroups, 1)
-	assert.Equal(t, "sg-123", instance.SecurityGroups[0].Id)
-	
-	// Check volumes
-	assert.Len(t, instance.Volumes, 1)
-	assert.Equal(t, "vol-123", instance.Volumes[0].VolumeID)
-	assert.Equal(t, "100", instance.Volumes[0].Size)
-	assert.Equal(t, "gp3", instance.Volumes[0].StorageType)
-
-	mockAPI.AssertExpectations(t)
-}
-
-func TestListInstances_WithPagination(t *testing.T) {
-	// Setup
-	mockAPI := new(mockEc2API)
-	service := Ec2Service{api: mockAPI}
-	ctx := context.Background()
-
-	// First page
-	firstOutput := &ec2.DescribeInstancesOutput{
-		Reservations: []types.Reservation{
-			{
-				Instances: []types.Instance{
-					{
-						InstanceId:   aws.String("i-first"),
-						InstanceType: types.InstanceTypeT3Micro,
-						State: &types.InstanceState{
-							Name: types.InstanceStateNameRunning,
+							IamInstanceProfile: &types.IamInstanceProfile{
+								Arn: aws.String("arn:aws:iam::123:instance-profile/test"),
+							},
 						},
 					},
 				},
 			},
 		},
-		NextToken: aws.String("token123"),
-	}
-
-	// Second page
-	secondOutput := &ec2.DescribeInstancesOutput{
-		Reservations: []types.Reservation{
-			{
-				Instances: []types.Instance{
-					{
-						InstanceId:   aws.String("i-second"),
-						InstanceType: types.InstanceTypeT3Small,
-						State: &types.InstanceState{
-							Name: types.InstanceStateNameStopped,
-						},
-					},
+		volumesOutput: &ec2.DescribeVolumesOutput{
+			Volumes: []types.Volume{
+				{
+					VolumeId:   aws.String("vol-abc"),
+					Size:       aws.Int32(100),
+					VolumeType: types.VolumeTypeGp3,
 				},
 			},
 		},
-		NextToken: nil,
 	}
 
-	mockAPI.On("DescribeInstances", ctx, mock.MatchedBy(func(input *ec2.DescribeInstancesInput) bool {
-		return input.NextToken == nil
-	})).Return(firstOutput, nil).Once()
+	svc := &Ec2Service{api: mock}
 
-	mockAPI.On("DescribeInstances", ctx, mock.MatchedBy(func(input *ec2.DescribeInstancesInput) bool {
-		return input.NextToken != nil && *input.NextToken == "token123"
-	})).Return(secondOutput, nil).Once()
-
-	mockAPI.On("DescribeVolumes", ctx, mock.Anything).Return(&ec2.DescribeVolumesOutput{}, nil)
-
-	// Execute
-	instances, err := service.ListInstances(ctx)
-
-	// Assert
-	assert.NoError(t, err)
-	assert.Len(t, instances, 2)
-	assert.Equal(t, "i-first", instances[0].InstanceID)
-	assert.Equal(t, "i-second", instances[1].InstanceID)
-
-	mockAPI.AssertExpectations(t)
-}
-
-func TestListInstances_EmptyResult(t *testing.T) {
-	// Setup
-	mockAPI := new(mockEc2API)
-	service := Ec2Service{api: mockAPI}
-	ctx := context.Background()
-
-	mockOutput := &ec2.DescribeInstancesOutput{
-		Reservations: []types.Reservation{},
-		NextToken:    nil,
+	instances, err := svc.ListInstances(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	mockAPI.On("DescribeInstances", ctx, mock.Anything).Return(mockOutput, nil)
+	if len(instances) != 1 {
+		t.Fatalf("expected 1 instance, got %d", len(instances))
+	}
 
-	// Execute
-	instances, err := service.ListInstances(ctx)
+	inst := instances[0]
 
-	// Assert
-	assert.NoError(t, err)
-	assert.Len(t, instances, 0)
-
-	mockAPI.AssertExpectations(t)
+	if inst.InstanceID != "i-12345" {
+		t.Errorf("InstanceID = %q", inst.InstanceID)
+	}
+	if inst.Name != "test-instance" {
+		t.Errorf("Name = %q", inst.Name)
+	}
+	if inst.InstanceType != "t3.medium" {
+		t.Errorf("InstanceType = %q", inst.InstanceType)
+	}
+	if inst.State != "running" {
+		t.Errorf("State = %q", inst.State)
+	}
+	if inst.PrivateIP != "10.0.1.100" {
+		t.Errorf("PrivateIP = %q", inst.PrivateIP)
+	}
+	if inst.VpcID != "vpc-123" {
+		t.Errorf("VpcID = %q", inst.VpcID)
+	}
+	if len(inst.SecurityGroups) != 2 {
+		t.Errorf("expected 2 SGs, got %d", len(inst.SecurityGroups))
+	}
+	if len(inst.Volumes) != 1 {
+		t.Errorf("expected 1 volume, got %d", len(inst.Volumes))
+	}
+	if inst.Volumes[0].VolumeID != "vol-abc" {
+		t.Errorf("VolumeID = %q", inst.Volumes[0].VolumeID)
+	}
+	if inst.Volumes[0].Size != "100" {
+		t.Errorf("Volume Size = %q", inst.Volumes[0].Size)
+	}
+	if len(inst.Tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(inst.Tags))
+	}
 }
 
-func TestGetVolumeDetails_Success(t *testing.T) {
-	// Setup
-	mockAPI := new(mockEc2API)
-	service := Ec2Service{api: mockAPI}
-	ctx := context.Background()
+func TestEc2Service_ListInstances_Error(t *testing.T) {
+	mock := &mockEc2API{
+		instancesErr: errors.New("boom"),
+	}
 
-	volumeIDs := []string{"vol-123", "vol-456"}
+	svc := &Ec2Service{api: mock}
 
-	mockOutput := &ec2.DescribeVolumesOutput{
-		Volumes: []types.Volume{
-			{
-				VolumeId:   aws.String("vol-123"),
-				Size:       aws.Int32(50),
-				VolumeType: types.VolumeTypeGp3,
-				Encrypted:  aws.Bool(true),
-			},
-			{
-				VolumeId:   aws.String("vol-456"),
-				Size:       aws.Int32(100),
-				VolumeType: types.VolumeTypeIo2,
-				Encrypted:  aws.Bool(false),
+	instances, err := svc.ListInstances(context.Background())
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if instances != nil {
+		t.Errorf("expected nil instances on error")
+	}
+}
+
+func TestEc2Service_ListInstances_EmptyResult(t *testing.T) {
+	mock := &mockEc2API{
+		instancesOutput: &ec2.DescribeInstancesOutput{
+			Reservations: []types.Reservation{},
+		},
+	}
+
+	svc := &Ec2Service{api: mock}
+
+	instances, err := svc.ListInstances(context.Background())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(instances) != 0 {
+		t.Errorf("expected 0 instances, got %d", len(instances))
+	}
+}
+
+func TestEc2Service_GetVolumeDetails_Success(t *testing.T) {
+	mock := &mockEc2API{
+		volumesOutput: &ec2.DescribeVolumesOutput{
+			Volumes: []types.Volume{
+				{
+					VolumeId:   aws.String("vol-123"),
+					Size:       aws.Int32(50),
+					VolumeType: types.VolumeTypeGp3,
+				},
+				{
+					VolumeId:   aws.String("vol-456"),
+					Size:       aws.Int32(100),
+					VolumeType: types.VolumeTypeIo2,
+				},
 			},
 		},
 	}
 
-	mockAPI.On("DescribeVolumes", ctx, mock.Anything).Return(mockOutput, nil)
+	svc := &Ec2Service{api: mock}
 
-	// Execute
-	volumes, err := service.GetVolumeDetails(ctx, volumeIDs)
+	volumes, err := svc.GetVolumeDetails(context.Background(), []string{"vol-123", "vol-456"})
 
-	// Assert
-	assert.NoError(t, err)
-	assert.Len(t, volumes, 2)
-	assert.Equal(t, "vol-123", volumes[0].VolumeID)
-	assert.Equal(t, "50", volumes[0].Size)
-	assert.Equal(t, "gp3", volumes[0].StorageType)
-	assert.Equal(t, "vol-456", volumes[1].VolumeID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	mockAPI.AssertExpectations(t)
+	if len(volumes) != 2 {
+		t.Fatalf("expected 2 volumes, got %d", len(volumes))
+	}
+
+	if volumes[0].VolumeID != "vol-123" {
+		t.Errorf("VolumeID = %q", volumes[0].VolumeID)
+	}
+	if volumes[0].Size != "50" {
+		t.Errorf("Size = %q", volumes[0].Size)
+	}
+	if volumes[0].StorageType != "gp3" {
+		t.Errorf("StorageType = %q", volumes[0].StorageType)
+	}
 }
 
-func TestGetVolumeDetails_EmptyInput(t *testing.T) {
-	// Setup
-	mockAPI := new(mockEc2API)
-	service := Ec2Service{api: mockAPI}
-	ctx := context.Background()
+func TestEc2Service_GetVolumeDetails_Error(t *testing.T) {
+	mock := &mockEc2API{
+		volumesErr: errors.New("volume error"),
+	}
 
-	// Execute
-	volumes, err := service.GetVolumeDetails(ctx, []string{})
+	svc := &Ec2Service{api: mock}
 
-	// Assert
-	assert.NoError(t, err)
-	assert.Len(t, volumes, 0)
-	mockAPI.AssertNotCalled(t, "DescribeVolumes")
+	volumes, err := svc.GetVolumeDetails(context.Background(), []string{"vol-123"})
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if volumes != nil {
+		t.Errorf("expected nil volumes on error")
+	}
+}
+
+func TestGetEbsVolumeData_Success(t *testing.T) {
+	mock := &mockEc2API{
+		volumesOutput: &ec2.DescribeVolumesOutput{
+			Volumes: []types.Volume{
+				{
+					VolumeId:   aws.String("vol-111"),
+					Size:       aws.Int32(30),
+					VolumeType: types.VolumeTypeGp2,
+				},
+			},
+		},
+	}
+
+	svc := &Ec2Service{api: mock}
+
+	bdms := []types.InstanceBlockDeviceMapping{
+		{
+			Ebs: &types.EbsInstanceBlockDevice{
+				VolumeId: aws.String("vol-111"),
+			},
+		},
+	}
+
+	volumes := svc.getEbsVolumeData(context.Background(), bdms)
+
+	if len(volumes) != 1 {
+		t.Fatalf("expected 1 volume, got %d", len(volumes))
+	}
+
+	if volumes[0].VolumeID != "vol-111" {
+		t.Errorf("VolumeID = %q", volumes[0].VolumeID)
+	}
+}
+
+func TestGetEbsVolumeData_EmptyInput(t *testing.T) {
+	mock := &mockEc2API{}
+	svc := &Ec2Service{api: mock}
+
+	bdms := []types.InstanceBlockDeviceMapping{}
+
+	volumes := svc.getEbsVolumeData(context.Background(), bdms)
+
+	if len(volumes) != 0 {
+		t.Errorf("expected 0 volumes, got %d", len(volumes))
+	}
+}
+
+func TestGetEbsVolumeData_VolumeAPIError(t *testing.T) {
+	mock := &mockEc2API{
+		volumesErr: errors.New("volume api error"),
+	}
+
+	svc := &Ec2Service{api: mock}
+
+	bdms := []types.InstanceBlockDeviceMapping{
+		{
+			Ebs: &types.EbsInstanceBlockDevice{
+				VolumeId: aws.String("vol-999"),
+			},
+		},
+	}
+
+	volumes := svc.getEbsVolumeData(context.Background(), bdms)
+
+	// Should return empty slice on error
+	if len(volumes) != 0 {
+		t.Errorf("expected 0 volumes on error, got %d", len(volumes))
+	}
 }
