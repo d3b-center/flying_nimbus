@@ -67,10 +67,10 @@ func TestResizeViewport(t *testing.T) {
 	}
 }
 
-func TestDetermineDefaultWindowSizes(t *testing.T) {
+func TestSetWindowSizes(t *testing.T) {
 	model := &Ec2ViewModel{}
 
-	model.determineDefaultWindowSizes()
+	model.setWindowSizes(10, 10)
 
 	// Just verify the method doesn't panic and sets some values
 	if model.instanceListWidth == 0 {
