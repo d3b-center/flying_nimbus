@@ -12,25 +12,24 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/bubbles/viewport"
 )
 
-
 type Ec2ViewModel struct {
-	app *app.App
-	list list.Model
-	loader spinner.Model
-	isLoading bool
-	instanceDetail string
-	detailsFocused bool
-	detailViewport viewport.Model
-	windowSize common.ContentWindowSizeMsg
-	ready bool
+	app               *app.App
+	list              list.Model
+	loader            spinner.Model
+	isLoading         bool
+	instanceDetail    string
+	detailsFocused    bool
+	detailViewport    viewport.Model
+	windowSize        common.ContentWindowSizeMsg
+	ready             bool
 	instanceListWidth int
-	detailsWidth int
-	contentHeight int
+	detailsWidth      int
+	contentHeight     int
 }
 
 type (
@@ -51,13 +50,13 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	loader.Style = spinnerStyle
 	loader.Spinner = spinner.Points
 
-	vp := viewport.New(0,0)
+	vp := viewport.New(0, 0)
 
 	return Ec2ViewModel{
-		app: appService,
-		list: l,
-		loader: loader,
-		isLoading: true,
+		app:            appService,
+		list:           l,
+		loader:         loader,
+		isLoading:      true,
 		detailsFocused: false,
 		detailViewport: vp,
 	}
@@ -90,13 +89,13 @@ func (m Ec2ViewModel) View() string {
 	listStyle := instancesListStyle.
 		Width(instanceListWidth).
 		Height(contentHeight)
-		
+
 	detailStyle := instanceDetailStyle.
 		Width(detailsWidth).
 		Height(contentHeight)
 
 	if m.detailsFocused {
-		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))  
+		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))
 		listStyle = listStyle.BorderForeground(lipgloss.Color("240"))
 	} else {
 		listStyle = listStyle.BorderForeground(lipgloss.Color("62"))
@@ -133,7 +132,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg) > 0 {
 			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 			slog.Debug("Viewport ready", "ready", m.ready)
-			
+
 			w, h := constants.DocStyle.GetFrameSize()
 			m.setWindowSizes(w, h)
 
@@ -141,7 +140,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resizeViewport(m.detailsWidth, m.contentHeight)
 			m.detailViewport.SetContent(m.instanceDetail)
 		}
-		
+
 	case spinner.TickMsg:
 		m.loader, cmd = m.loader.Update(msg)
 		return m, cmd
@@ -230,7 +229,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 
 	rows = append(rows, "", sectionHeaderStyle.Render("EBS Volumes"))
 	rows = append(rows, components.GenerateEbsVolumeRows(instance.Volumes)...)
-	
+
 	rows = append(rows, "", sectionHeaderStyle.Render("Tags"))
 	rows = append(rows, components.GenerateTagRows(instance.Tags)...)
 

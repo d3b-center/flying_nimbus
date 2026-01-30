@@ -15,8 +15,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-
-
 type RdsViewModel struct {
 	app               *app.App
 	list              list.Model

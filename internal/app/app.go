@@ -46,7 +46,7 @@ func InitApp(verbose bool) (*App, error) {
 		cancel()
 		return nil, err
 	}
-	
+
 	slog.Debug("App initialized")
 
 	return &App{

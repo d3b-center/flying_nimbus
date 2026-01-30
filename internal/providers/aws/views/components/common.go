@@ -1,11 +1,11 @@
 package components
 
 import (
-	"fmt"
-	"log/slog"
 	"encoding/json"
 	"flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
+	"fmt"
+	"log/slog"
 )
 
 func GenerateTagRows(tags map[string]string) []string {
@@ -30,11 +30,11 @@ func GenerateEbsVolumeRows(volumes []aws.EbsVolume) []string {
 	var rows []string
 
 	for _, vol := range volumes {
-		rows = append(rows, 
+		rows = append(rows,
 			fmt.Sprintf("  • %s", vol.VolumeID),
 			fmt.Sprintf("    Size: %s GB | Type: %s ", vol.Size, vol.StorageType),
 		)
 	}
-	
+
 	return rows
 }

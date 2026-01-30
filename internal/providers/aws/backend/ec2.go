@@ -2,9 +2,9 @@ package aws
 
 import (
 	"context"
-	"time"
-	"strconv"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -12,30 +12,30 @@ import (
 )
 
 type Ec2Instance struct {
-	InstanceID             string
-	Name                   string
-	InstanceType           string
-	AmiImage               string
-	State                  string
-	PrivateIP              string
-	PublicIP               string
-	VpcID                  string
-	Tags                   map[string]string
-	SubnetID               string
-	IamInstanceProfile     string
-	LaunchTime             string
-	Volumes                []EbsVolume
-	SecurityGroups         []SecurityGroup
+	InstanceID         string
+	Name               string
+	InstanceType       string
+	AmiImage           string
+	State              string
+	PrivateIP          string
+	PublicIP           string
+	VpcID              string
+	Tags               map[string]string
+	SubnetID           string
+	IamInstanceProfile string
+	LaunchTime         string
+	Volumes            []EbsVolume
+	SecurityGroups     []SecurityGroup
 }
 
 type EbsVolume struct {
-	VolumeID string
-	Size     string
+	VolumeID    string
+	Size        string
 	StorageType string
 }
 
 type ec2API interface {
-	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFuncs...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFuncs ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error)
 }
 
@@ -64,25 +64,25 @@ func InitEc2Service(cfg aws.Config) *Ec2Service {
 }
 
 func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([]EbsVolume, error) {
-    input := &ec2.DescribeVolumesInput{
-        VolumeIds: volumeIDs,
-    }
-    
-    result, err := e.api.DescribeVolumes(ctx, input)
-    if err != nil {
-        return nil, err
-    }
-    
-    var volumes []EbsVolume
-    for _, vol := range result.Volumes {
-        volumes = append(volumes, EbsVolume{
-            VolumeID: aws.ToString(vol.VolumeId),
-            Size:     strconv.Itoa(int(aws.ToInt32(vol.Size))),
-            StorageType: string(vol.VolumeType),
-        })
-    }
-    
-    return volumes, nil
+	input := &ec2.DescribeVolumesInput{
+		VolumeIds: volumeIDs,
+	}
+
+	result, err := e.api.DescribeVolumes(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	var volumes []EbsVolume
+	for _, vol := range result.Volumes {
+		volumes = append(volumes, EbsVolume{
+			VolumeID:    aws.ToString(vol.VolumeId),
+			Size:        strconv.Itoa(int(aws.ToInt32(vol.Size))),
+			StorageType: string(vol.VolumeType),
+		})
+	}
+
+	return volumes, nil
 }
 
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
@@ -110,7 +110,6 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 					}
 				}
 
-
 				var securityGroups []SecurityGroup
 				for _, sg := range instance.SecurityGroups {
 					if sg.GroupId != nil {
@@ -127,21 +126,21 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 				if instance.LaunchTime != nil {
 					launchTime = instance.LaunchTime.Format(time.RFC3339)
 				}
-	
+
 				instances = append(instances, Ec2Instance{
-					InstanceID: aws.ToString(instance.InstanceId),
-					Name: name,
-					InstanceType: string(instance.InstanceType),
-					State: string(instance.State.Name),
-					PrivateIP :              aws.ToString(instance.PrivateIpAddress),
-					PublicIP:               aws.ToString(instance.PublicIpAddress),
-					VpcID:                  aws.ToString(instance.VpcId),
-					Tags :                  tagMap,
-					SubnetID:               aws.ToString(instance.SubnetId),
-					IamInstanceProfile :    iamProfile,
-					LaunchTime:             launchTime,
-					Volumes:      e.getEbsVolumeData(ctx, instance.BlockDeviceMappings),
-					SecurityGroups: securityGroups,
+					InstanceID:         aws.ToString(instance.InstanceId),
+					Name:               name,
+					InstanceType:       string(instance.InstanceType),
+					State:              string(instance.State.Name),
+					PrivateIP:          aws.ToString(instance.PrivateIpAddress),
+					PublicIP:           aws.ToString(instance.PublicIpAddress),
+					VpcID:              aws.ToString(instance.VpcId),
+					Tags:               tagMap,
+					SubnetID:           aws.ToString(instance.SubnetId),
+					IamInstanceProfile: iamProfile,
+					LaunchTime:         launchTime,
+					Volumes:            e.getEbsVolumeData(ctx, instance.BlockDeviceMappings),
+					SecurityGroups:     securityGroups,
 				})
 			}
 		}
