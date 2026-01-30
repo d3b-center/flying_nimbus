@@ -14,14 +14,13 @@ func GenerateTagRows(tags map[string]string) []string {
 	slog.Debug(string(debug))
 
 	if len(tags) == 0 {
-		return append(rows, "  None")
+		slog.Debug("No tags found")
+		return append(rows, "    None")
 	}
 
 	for key, value := range tags {
 		slog.Debug("Appending tag", "key", key, "value", value)
-		if key != "Name" { // Skip Name tag since it's already shown
-			rows = append(rows, common.KV("  "+key, value))
-		}
+		rows = append(rows, common.KV("  "+key, value))
 	}
 
 	return rows

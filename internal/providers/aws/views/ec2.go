@@ -80,6 +80,7 @@ func (m Ec2ViewModel) View() string {
 	}
 
 	w, h := constants.DocStyle.GetFrameSize()
+	m.windowSize = common.ContentWindowSizeMsg{Width: w, Height: h}
 	contentWidth := constants.WindowSize.Width - w
 	contentHeight := constants.WindowSize.Height - h
 
@@ -87,16 +88,22 @@ func (m Ec2ViewModel) View() string {
 	detailsWidth := contentWidth - instanceListWidth
 
 	m.list.SetSize(instanceListWidth, contentHeight)
+	if !m.ready {
+		m.detailViewport = viewport.New(detailsWidth, contentHeight)
+		m.ready = true
+	} else {
+		m.detailViewport.Width = detailsWidth
+		m.detailViewport.Height = contentHeight
+	}
+	m.detailViewport.SetContent(m.instanceDetail)
 
 	listStyle := instancesListStyle.
 		Width(instanceListWidth).
-		Height(contentHeight).
-		MaxHeight(contentHeight)
+		Height(contentHeight)
 		
 	detailStyle := instanceDetailStyle.
 		Width(detailsWidth).
-		Height(contentHeight).
-		MaxHeight(contentHeight)
+		Height(contentHeight)
 
 	if m.detailsFocused {
 		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))  // Bright color
@@ -136,19 +143,22 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailViewport.Height = msg.Height
 		}
 
-		if m.instanceDetail != "" {
-			m.detailViewport.SetContent(m.instanceDetail)
-		}
 	case ec2InstancesLoadedMsg:
 		m.isLoading = false
 		m.list.SetItems(msg)
-		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
 
-		if len(msg) > 0 {
-			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
-			m.detailViewport.SetContent(m.instanceDetail)
+		if !m.ready {
+			m.detailViewport = viewport.New(m.detailsWidth, m.windowSize.Height)
+			m.ready = true
+		} else {
+			m.detailViewport.Width = m.detailsWidth
+			m.detailViewport.Height = m.windowSize.Height
 		}
+
+		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
+		m.detailViewport.SetContent(m.instanceDetail)
+		
 	case spinner.TickMsg:
 		m.loader, cmd = m.loader.Update(msg)
 		return m, cmd
@@ -158,11 +168,9 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "right":
 			slog.Debug("Focus on details view")
 			m.detailsFocused = true
-			return m, nil
 		case "left":
 			slog.Debug("Focus on instances list")
 			m.detailsFocused = false
-			return m, nil
 		case "down":
 			if m.detailsFocused {
 				m.detailViewport.ViewDown()
@@ -244,4 +252,16 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	rows = append(rows, components.GenerateTagRows(instance.Tags)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func (m Ec2ViewModel) resizeViewport(width int, height int) {
+	if !m.ready {
+		m.detailViewport = viewport.New(width, height)
+		m.ready = true
+	} else {
+		m.detailViewport.Width = width
+		m.detailViewport.Height = height
+	}
+
+	m.detailViewport.SetContent(m.instanceDetail)
 }
