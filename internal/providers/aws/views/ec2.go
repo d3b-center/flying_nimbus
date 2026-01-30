@@ -96,11 +96,11 @@ func (m Ec2ViewModel) View() string {
 		Height(contentHeight)
 
 	if m.detailsFocused {
-		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))  // Bright color
-		listStyle = listStyle.BorderForeground(lipgloss.Color("240"))     // Dim color
+		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))  
+		listStyle = listStyle.BorderForeground(lipgloss.Color("240"))
 	} else {
-		listStyle = listStyle.BorderForeground(lipgloss.Color("62"))      // Bright color
-		detailStyle = detailStyle.BorderForeground(lipgloss.Color("240")) // Dim color
+		listStyle = listStyle.BorderForeground(lipgloss.Color("62"))
+		detailStyle = detailStyle.BorderForeground(lipgloss.Color("240"))
 	}
 
 	left := listStyle.Render(m.list.View())
@@ -119,9 +119,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
 
 		m.windowSize = msg
-		m.instanceListWidth = msg.Width / 3
-		m.detailsWidth = msg.Width - m.instanceListWidth
-		m.contentHeight = msg.Height
+		m.setWindowSizes(msg.Width, msg.Height)
 
 		m.list.SetSize(m.instanceListWidth, m.contentHeight)
 		m.resizeViewport(m.detailsWidth, m.contentHeight)
@@ -136,10 +134,11 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 			slog.Debug("Viewport ready", "ready", m.ready)
 			
-			m.determineDefaultWindowSizes()
+			w, h := constants.DocStyle.GetFrameSize()
+			m.setWindowSizes(w, h)
+
 			m.list.SetSize(m.instanceListWidth, m.contentHeight)
 			m.resizeViewport(m.detailsWidth, m.contentHeight)
-
 			m.detailViewport.SetContent(m.instanceDetail)
 		}
 		
@@ -248,8 +247,7 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	}
 }
 
-func (m *Ec2ViewModel) determineDefaultWindowSizes() {
-	w, h := constants.DocStyle.GetFrameSize()
+func (m *Ec2ViewModel) setWindowSizes(w int, h int) {
 	contentWidth := constants.WindowSize.Width - w
 	contentHeight := constants.WindowSize.Height - h
 
