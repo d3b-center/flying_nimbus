@@ -30,6 +30,7 @@ type Ec2ViewModel struct {
 	ready bool
 	instanceListWidth int
 	detailsWidth int
+	contentHeight int
 }
 
 type (
@@ -87,15 +88,8 @@ func (m Ec2ViewModel) View() string {
 	instanceListWidth := contentWidth / 3
 	detailsWidth := contentWidth - instanceListWidth
 
-	m.list.SetSize(instanceListWidth, contentHeight)
-	if !m.ready {
-		m.detailViewport = viewport.New(detailsWidth, contentHeight)
-		m.ready = true
-	} else {
-		m.detailViewport.Width = detailsWidth
-		m.detailViewport.Height = contentHeight
-	}
-	m.detailViewport.SetContent(m.instanceDetail)
+	// m.list.SetSize(instanceListWidth, contentHeight)
+	// m.resizeViewport(instanceListWidth, contentHeight)
 
 	listStyle := instancesListStyle.
 		Width(instanceListWidth).
@@ -131,33 +125,27 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowSize = msg
 		m.instanceListWidth = msg.Width / 3
 		m.detailsWidth = msg.Width - m.instanceListWidth
+		m.contentHeight = msg.Height
 
-		m.list.SetSize(m.instanceListWidth, msg.Height)
-
-		// Initialize or resize viewport
-		if !m.ready {
-			m.detailViewport = viewport.New(m.detailsWidth, msg.Height)
-			m.ready = true
-		} else {
-			m.detailViewport.Width = m.detailsWidth
-			m.detailViewport.Height = msg.Height
-		}
+		m.list.SetSize(m.instanceListWidth, m.contentHeight)
+		m.resizeViewport(m.detailsWidth, m.contentHeight)
+		m.detailViewport.SetContent(m.instanceDetail)
 
 	case ec2InstancesLoadedMsg:
 		m.isLoading = false
 		m.list.SetItems(msg)
 		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
 
-		if !m.ready {
-			m.detailViewport = viewport.New(m.detailsWidth, m.windowSize.Height)
-			m.ready = true
-		} else {
-			m.detailViewport.Width = m.detailsWidth
-			m.detailViewport.Height = m.windowSize.Height
-		}
+		if len(msg) > 0 {
+			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
+			slog.Debug("Viewport ready", "ready", m.ready)
+			
+			m.determineWindowSizes()
+			m.list.SetSize(m.instanceListWidth, m.contentHeight)
+			m.resizeViewport(m.detailsWidth, m.contentHeight)
 
-		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
-		m.detailViewport.SetContent(m.instanceDetail)
+			m.detailViewport.SetContent(m.instanceDetail)
+		}
 		
 	case spinner.TickMsg:
 		m.loader, cmd = m.loader.Update(msg)
@@ -254,7 +242,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-func (m Ec2ViewModel) resizeViewport(width int, height int) {
+func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	if !m.ready {
 		m.detailViewport = viewport.New(width, height)
 		m.ready = true
@@ -262,6 +250,14 @@ func (m Ec2ViewModel) resizeViewport(width int, height int) {
 		m.detailViewport.Width = width
 		m.detailViewport.Height = height
 	}
+}
 
-	m.detailViewport.SetContent(m.instanceDetail)
+func (m *Ec2ViewModel) determineWindowSizes() {
+	w, h := constants.DocStyle.GetFrameSize()
+	contentWidth := constants.WindowSize.Width - w
+	contentHeight := constants.WindowSize.Height - h
+
+	m.instanceListWidth = contentWidth / 3
+	m.detailsWidth = (contentWidth * 2) / 3
+	m.contentHeight = contentHeight
 }
