@@ -218,13 +218,64 @@ func generateInstanceDetail(selectedItem list.Item, sgs map[string]*aws.Security
 		"",
 		sectionHeaderStyle.Render("Network"),
 		common.KV("VPC", rds.VpcID),
-		common.KV("Subnets", ""),
 		"",
 	}
+
+	rows = append(rows, subnetSection(rds.SubnetIds, sectionHeaderStyle)...)
+
+	rows = append(rows, "")
 
 	rows = append(rows, securityGroupRulesSection(rds.SecurityGroupIds, sgs, sectionHeaderStyle)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+func formatSubnetIds(subnetIds []string) []string {
+	rows := make([]string, 0, len(subnetIds))
+	for _, id := range subnetIds {
+		rows = append(rows, fmt.Sprintf("  ‣ %s", id))
+	}
+	return rows
+}
+
+func subnetSection(
+	subnetIds []string,
+	headerStyle lipgloss.Style,
+) []string {
+
+	return common.RenderSection(
+		"Subnets",
+		headerStyle,
+		func() []string {
+			return formatSubnetIds(subnetIds)
+		},
+	)
+}
+
+// securityGroupRulesSection generates the Security Group Rules section for the details panel.
+func securityGroupRulesSection(
+	sgIds []string,
+	securityGroups map[string]*aws.SecurityGroup,
+	headerStyle lipgloss.Style,
+) []string {
+
+	return common.RenderSection(
+		"Security Group Rules",
+		headerStyle,
+		func() []string {
+			rules := flattenSecurityGroupRules(sgIds, securityGroups)
+
+			if len(rules) == 0 {
+				return nil
+			}
+
+			rows := make([]string, 0, len(rules))
+			for _, rule := range rules {
+				rows = append(rows, formatSecurityGroupRule(rule))
+			}
+			return rows
+		},
+	)
 }
 
 // formatSecurityGroupRule returns a formatted string representation of a security group rule.
@@ -288,29 +339,4 @@ func flattenSecurityGroupRules(
 	}
 
 	return out
-}
-
-// securityGroupRulesSection generates the Security Group Rules section for the details panel.
-func securityGroupRulesSection(
-	sgIds []string,
-	securityGroups map[string]*aws.SecurityGroup,
-	sectionHeaderStyle lipgloss.Style,
-) []string {
-
-	rows := []string{
-		sectionHeaderStyle.Render("Security Group Rules"),
-	}
-
-	rules := flattenSecurityGroupRules(sgIds, securityGroups)
-
-	if len(rules) == 0 {
-		rows = append(rows, "  (no rules)")
-		return rows
-	}
-
-	for _, rule := range rules {
-		rows = append(rows, formatSecurityGroupRule(rule))
-	}
-
-	return rows
 }
