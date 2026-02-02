@@ -68,19 +68,34 @@ func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error)
 		return nil, fmt.Errorf("Unable to load RDS instances: %v", err)
 	}
 
+	if rawDBInstances == nil {
+		return nil, fmt.Errorf("Invalid list of dbs return'd")
+	}
+
 	instances := make([]RDSInstance, len(rawDBInstances.DBInstances))
 	slog.Debug(fmt.Sprintf("Total RDS Instances return %d", len(rawDBInstances.DBInstances)))
 
 	for i, db := range rawDBInstances.DBInstances {
+		endpoint := ""
+		port := int32(0)
+
+		if db.Endpoint != nil {
+			endpoint = aws.ToString(db.Endpoint.Address)
+			port = aws.ToInt32(db.Endpoint.Port)
+		}
+
+		vpcId, subnetIds := getVpcIdAndSubnetIds(db.DBSubnetGroup)
+
 		instance := RDSInstance{
 			Id:                   aws.ToString(db.DBInstanceIdentifier),
-			Endpoint:             aws.ToString(db.Endpoint.Address),
-			Port:                 aws.ToInt32(db.Endpoint.Port),
+			Endpoint:             endpoint,
+			Port:                 port,
 			Status:               aws.ToString(db.DBInstanceStatus),
 			DbEngine:             aws.ToString(db.Engine),
 			DbVersion:            aws.ToString(db.EngineVersion),
 			InstanceClass:        aws.ToString(db.DBInstanceClass),
-			VpcID:                aws.ToString(db.DBSubnetGroup.VpcId),
+			VpcID:                vpcId,
+			SubnetIds:            subnetIds,
 			IsPubliclyAccessible: aws.ToBool(db.PubliclyAccessible),
 			AllocatedStorage:     aws.ToInt32(db.AllocatedStorage),
 			SecurityGroupIds:     getSecurityGroupIds(db.VpcSecurityGroups),
@@ -90,6 +105,27 @@ func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error)
 	}
 
 	return instances, nil
+}
+
+// getVpcIdAndSubnetIds extracts VPC Id and subnetIds from DBSubnetGroup
+func getVpcIdAndSubnetIds(network *types.DBSubnetGroup) (string, []string) {
+
+	vpcId := ""
+	subnetIds := []string{}
+	if network == nil {
+		return vpcId, subnetIds
+	}
+
+	vpcId = aws.ToString(network.VpcId)
+	for _, subnet := range network.Subnets {
+		if subnet.SubnetIdentifier == nil {
+			continue
+		}
+		subnetIds = append(subnetIds, aws.ToString(subnet.SubnetIdentifier))
+
+	}
+
+	return vpcId, subnetIds
 }
 
 // getSecurityGroupIds extracts security group IDs from
