@@ -1,25 +1,40 @@
 package views
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"encoding/json"
+	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/tui/common"
+	"fmt"
+	"log/slog"
 )
 
-var (
-	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
-	instancesListStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-	instanceDetailStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-	headerStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("62")).
-			Foreground(lipgloss.Color("230")).
-			Padding(0, 1)
-	sectionHeaderStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("62")).
-				PaddingBottom(1)
-)
+func GenerateTagRows(tags map[string]string) []string {
+	var rows []string
+	debug, _ := json.Marshal(tags)
+	slog.Debug(string(debug))
+
+	if len(tags) == 0 {
+		slog.Debug("No tags found")
+		return append(rows, "    None")
+	}
+
+	for key, value := range tags {
+		slog.Debug("Appending tag", "key", key, "value", value)
+		rows = append(rows, common.KV("  "+key, value))
+	}
+
+	return rows
+}
+
+func GenerateEbsVolumeRows(volumes []aws.EbsVolume) []string {
+	var rows []string
+
+	for _, vol := range volumes {
+		rows = append(rows,
+			fmt.Sprintf("  • %s", vol.VolumeID),
+			fmt.Sprintf("    Size: %d GB | Type: %s ", vol.SizeGb, vol.StorageType),
+		)
+	}
+
+	return rows
+}

@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -30,7 +29,7 @@ type Ec2Instance struct {
 
 type EbsVolume struct {
 	VolumeID    string
-	Size        string
+	SizeGb        int32
 	StorageType string
 }
 
@@ -77,7 +76,7 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 	for _, vol := range result.Volumes {
 		volumes = append(volumes, EbsVolume{
 			VolumeID:    aws.ToString(vol.VolumeId),
-			Size:        strconv.Itoa(int(aws.ToInt32(vol.Size))),
+			SizeGb:      aws.ToInt32(vol.Size),
 			StorageType: string(vol.VolumeType),
 		})
 	}
@@ -98,34 +97,12 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 
 		for _, reservation := range result.Reservations {
 			for _, instance := range reservation.Instances {
-				tagMap := make(map[string]string)
-				var name string
+				tagMap, name := extractTags(instance.Tags)
+				securityGroups := extractSecurityGroups(instance.SecurityGroups)
+				iamProfile := extractIamProfile(instance.IamInstanceProfile)
+				launchTime := extractLaunchTime(instance.LaunchTime)
+				volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
 
-				for _, tag := range instance.Tags {
-					if tag.Key != nil && tag.Value != nil {
-						tagMap[*tag.Key] = *tag.Value
-						if *tag.Key == "Name" {
-							name = *tag.Value
-						}
-					}
-				}
-
-				var securityGroups []SecurityGroup
-				for _, sg := range instance.SecurityGroups {
-					if sg.GroupId != nil {
-						securityGroups = append(securityGroups, SecurityGroup{Id: *sg.GroupId})
-					}
-				}
-
-				iamProfile := ""
-				if instance.IamInstanceProfile != nil && instance.IamInstanceProfile.Arn != nil {
-					iamProfile = *instance.IamInstanceProfile.Arn
-				}
-
-				launchTime := ""
-				if instance.LaunchTime != nil {
-					launchTime = instance.LaunchTime.Format(time.RFC3339)
-				}
 
 				instances = append(instances, Ec2Instance{
 					InstanceID:         aws.ToString(instance.InstanceId),
@@ -139,7 +116,7 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 					SubnetID:           aws.ToString(instance.SubnetId),
 					IamInstanceProfile: iamProfile,
 					LaunchTime:         launchTime,
-					Volumes:            e.getEbsVolumeData(ctx, instance.BlockDeviceMappings),
+					Volumes:            volumes,
 					SecurityGroups:     securityGroups,
 				})
 			}
@@ -159,7 +136,7 @@ func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceB
 	var volumeIds []string
 	for _, bdm := range bdms {
 		if bdm.Ebs != nil && bdm.Ebs.VolumeId != nil {
-			volumeIds = append(volumeIds, *bdm.Ebs.VolumeId)
+			volumeIds = append(volumeIds, aws.ToString(bdm.Ebs.VolumeId))
 		}
 	}
 
@@ -174,4 +151,44 @@ func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceB
 	}
 
 	return volumes
+}
+
+func extractTags(tags []types.Tag) (map[string]string, string) {
+	tagMap := make(map[string]string)
+	name := ""
+
+	for _, tag := range tags {
+		if tag.Key != nil && tag.Value != nil {
+			tagMap[*tag.Key] = *tag.Value
+			if *tag.Key == "Name" {
+				name = *tag.Value
+			}
+		}
+	}
+
+	return tagMap, name
+}
+
+func extractSecurityGroups(sgs []types.GroupIdentifier) []SecurityGroup {
+	var securityGroups []SecurityGroup
+	for _, sg := range sgs {
+		if sg.GroupId != nil {
+			securityGroups = append(securityGroups, SecurityGroup{Id: *sg.GroupId})
+		}
+	}
+	return securityGroups
+}
+
+func extractIamProfile(profile *types.IamInstanceProfile) string {
+	if profile != nil && profile.Arn != nil {
+		return *profile.Arn
+	}
+	return ""
+}
+
+func extractLaunchTime(launchTime *time.Time) string {
+	if launchTime != nil {
+		return launchTime.Format(time.RFC3339)
+	}
+	return ""
 }

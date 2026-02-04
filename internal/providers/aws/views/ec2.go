@@ -4,7 +4,6 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/providers/aws/backend"
-	"flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
@@ -47,7 +46,7 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	l.SetShowHelp(false)
 
 	loader := spinner.New()
-	loader.Style = spinnerStyle
+	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
 	vp := viewport.New(0, 0)
@@ -86,11 +85,11 @@ func (m Ec2ViewModel) View() string {
 	instanceListWidth := contentWidth / 3
 	detailsWidth := contentWidth - instanceListWidth
 
-	listStyle := instancesListStyle.
+	listStyle := common.InstancesListStyle.
 		Width(instanceListWidth).
 		Height(contentHeight)
 
-	detailStyle := instanceDetailStyle.
+	detailStyle := common.InstanceDetailStyle.
 		Width(detailsWidth).
 		Height(contentHeight)
 
@@ -199,9 +198,9 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows := []string{
-		headerStyle.Render("Instance Details"),
+		common.HeaderStyle.Render("Instance Details"),
 		"",
-		sectionHeaderStyle.Render("General Info"),
+		common.SectionHeaderStyle.Render("General Info"),
 		common.KV("Instance ID", instance.InstanceID),
 		common.KV("Name", instance.Name),
 		common.KV("Instance Type", instance.InstanceType),
@@ -209,13 +208,13 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 		common.KV("IAM Profile", instance.IamInstanceProfile),
 		common.KV("Launch Time", instance.LaunchTime),
 		"",
-		sectionHeaderStyle.Render("Network"),
+		common.SectionHeaderStyle.Render("Network"),
 		common.KV("Private IP", instance.PrivateIP),
 		common.KV("Public IP", instance.PublicIP),
 		common.KV("VPC", instance.VpcID),
 		common.KV("Subnet", instance.SubnetID),
 		"",
-		sectionHeaderStyle.Render("Security Groups"),
+		common.SectionHeaderStyle.Render("Security Groups"),
 	}
 
 	// Add security groups
@@ -227,11 +226,11 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 		rows = append(rows, "  None")
 	}
 
-	rows = append(rows, "", sectionHeaderStyle.Render("EBS Volumes"))
-	rows = append(rows, components.GenerateEbsVolumeRows(instance.Volumes)...)
+	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
+	rows = append(rows, GenerateEbsVolumeRows(instance.Volumes)...)
 
-	rows = append(rows, "", sectionHeaderStyle.Render("Tags"))
-	rows = append(rows, components.GenerateTagRows(instance.Tags)...)
+	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
+	rows = append(rows, GenerateTagRows(instance.Tags)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }

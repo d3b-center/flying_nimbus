@@ -14,7 +14,25 @@ var (
 				Foreground(lipgloss.Color("#EE6FF8"))
 	DefaultValueStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("255"))
+	SpinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
+	InstancesListStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	InstanceDetailStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	HeaderStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("62")).
+			Foreground(lipgloss.Color("230")).
+			Padding(0, 1)
+	SectionHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("62")).
+				PaddingBottom(1)
 )
+
 
 // KVOption configures the behavior of the KV renderer.
 type KVOption func(*kvConfig)
