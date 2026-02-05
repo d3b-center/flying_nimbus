@@ -141,27 +141,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loader, cmd = m.loader.Update(msg)
 		return m, cmd
 	case tea.KeyMsg:
-		// Allow scrolling in detail viewport
-		switch msg.String() {
-		case "right":
-			slog.Debug("Focus on details view")
-			m.detailsFocused = true
-		case "left":
-			slog.Debug("Focus on instances list")
-			m.detailsFocused = false
-		case "down":
-			if m.detailsFocused {
-				m.detailViewport.ViewDown()
-			} else {
-				m.list, cmd = m.list.Update(msg)
-			}
-		case "up":
-			if m.detailsFocused {
-				m.detailViewport.ViewUp()
-			} else {
-				m.list, cmd = m.list.Update(msg)
-			}
-		}
+		cmd = m.handleKeypress(msg)
 	default:
 		m.list, cmd = m.list.Update(msg)
 	}
@@ -264,4 +244,29 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 	m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 	m.detailViewport.SetContent(m.instanceDetail)
 	m.detailViewport.GotoTop()
+}
+
+func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	switch msg.String() {
+		case "right":
+			slog.Debug("Focus on details view")
+			m.detailsFocused = true
+		case "left":
+			slog.Debug("Focus on instances list")
+			m.detailsFocused = false
+		case "down":
+			if m.detailsFocused {
+				m.detailViewport.ViewDown()
+			} else {
+				m.list, cmd = m.list.Update(msg)
+			}
+		case "up":
+			if m.detailsFocused {
+				m.detailViewport.ViewUp()
+			} else {
+				m.list, cmd = m.list.Update(msg)
+			}
+		}
+	return cmd
 }
