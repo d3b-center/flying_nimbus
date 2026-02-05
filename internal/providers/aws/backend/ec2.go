@@ -24,7 +24,7 @@ type Ec2Instance struct {
 	IamInstanceProfile string
 	LaunchTime         string
 	Volumes            []EbsVolume
-	SecurityGroups     []SecurityGroup
+	SecurityGroupIds     []string
 }
 
 type EbsVolume struct {
@@ -117,7 +117,7 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 					IamInstanceProfile: iamProfile,
 					LaunchTime:         launchTime,
 					Volumes:            volumes,
-					SecurityGroups:     securityGroups,
+					SecurityGroupIds:     securityGroups,
 				})
 			}
 		}
@@ -169,14 +169,14 @@ func extractTags(tags []types.Tag) (map[string]string, string) {
 	return tagMap, name
 }
 
-func extractSecurityGroups(sgs []types.GroupIdentifier) []SecurityGroup {
-	var securityGroups []SecurityGroup
+func extractSecurityGroups(sgs []types.GroupIdentifier) []string {
+	var securityGroupIds []string
 	for _, sg := range sgs {
 		if sg.GroupId != nil {
-			securityGroups = append(securityGroups, SecurityGroup{Id: *sg.GroupId})
+			securityGroupIds = append(securityGroupIds, aws.ToString(sg.GroupId))
 		}
 	}
-	return securityGroups
+	return securityGroupIds
 }
 
 func extractIamProfile(profile *types.IamInstanceProfile) string {

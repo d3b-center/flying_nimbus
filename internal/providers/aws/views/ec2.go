@@ -16,6 +16,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const ec2InstanceListWidthRatio = 0.25
+
 type Ec2ViewModel struct {
 	app               *app.App
 	list              list.Model
@@ -45,20 +47,29 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 
+	windowSize := common.ContentWindowSizeMsg{
+		Height: constants.WindowSize.Height,
+		Width: constants.WindowSize.Width,
+	}
+
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
 	vp := viewport.New(0, 0)
 
-	return Ec2ViewModel{
+	m := Ec2ViewModel{
 		app:            appService,
 		list:           l,
 		loader:         loader,
 		isLoading:      true,
 		detailsFocused: false,
 		detailViewport: vp,
+		windowSize : windowSize,
 	}
+	m.updateLayout(windowSize)
+
+	return m
 }
 
 func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.Cmd {
@@ -115,13 +126,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
 		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
-
-		m.windowSize = msg
-		m.setWindowSizes(msg.Width, msg.Height)
-
-		m.list.SetSize(m.instanceListWidth, m.contentHeight)
-		m.resizeViewport(m.detailsWidth, m.contentHeight)
-		m.detailViewport.SetContent(m.instanceDetail)
+		m.updateLayout(msg)
 
 	case ec2InstancesLoadedMsg:
 		m.isLoading = false
@@ -129,15 +134,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
 
 		if len(msg) > 0 {
-			m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
-			slog.Debug("Viewport ready", "ready", m.ready)
-
-			w, h := constants.DocStyle.GetFrameSize()
-			m.setWindowSizes(w, h)
-
-			m.list.SetSize(m.instanceListWidth, m.contentHeight)
-			m.resizeViewport(m.detailsWidth, m.contentHeight)
-			m.detailViewport.SetContent(m.instanceDetail)
+			m.updateInstanceDetails()
 		}
 
 	case spinner.TickMsg:
@@ -171,9 +168,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.list.Index() != prevIndex {
 		slog.Debug("Selection changed, regenerating detail", "index", m.list.Index())
-		m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
-		m.detailViewport.SetContent(m.instanceDetail)
-		m.detailViewport.GotoTop()
+		m.updateInstanceDetails()
 	}
 
 	return m, cmd
@@ -218,9 +213,9 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	// Add security groups
-	if len(instance.SecurityGroups) > 0 {
-		for _, sg := range instance.SecurityGroups {
-			rows = append(rows, "  • "+sg.Id)
+	if len(instance.SecurityGroupIds) > 0 {
+		for _, id := range instance.SecurityGroupIds {
+			rows = append(rows, "  • "+id)
 		}
 	} else {
 		rows = append(rows, "  None")
@@ -245,11 +240,28 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	}
 }
 
-func (m *Ec2ViewModel) setWindowSizes(w int, h int) {
-	contentWidth := constants.WindowSize.Width - w
-	contentHeight := constants.WindowSize.Height - h
+func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
+	m.windowSize = msg
 
-	m.instanceListWidth = contentWidth / 3
-	m.detailsWidth = (contentWidth * 2) / 3
-	m.contentHeight = contentHeight
+	m.instanceListWidth = int(float64(msg.Width) * ec2InstanceListWidthRatio)
+	m.detailsWidth = msg.Width - m.instanceListWidth
+	m.contentHeight = msg.Height
+
+	if !m.ready {
+		m.detailViewport = viewport.New(m.instanceListWidth, m.contentHeight)
+		m.ready = true
+	} else {
+		m.detailViewport.Width = m.detailsWidth
+		m.detailViewport.Height = m.contentHeight
+		m.resizeViewport(m.detailViewport.Width, m.detailViewport.Height)
+	}
+
+	m.list.SetSize(m.instanceListWidth, m.contentHeight)
+	m.detailViewport.SetContent(m.instanceDetail)
+}
+
+func (m *Ec2ViewModel) updateInstanceDetails() {
+	m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
+	m.detailViewport.SetContent(m.instanceDetail)
+	m.detailViewport.GotoTop()
 }
