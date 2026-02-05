@@ -102,13 +102,14 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 				iamProfile := extractIamProfile(instance.IamInstanceProfile)
 				launchTime := extractLaunchTime(instance.LaunchTime)
 				volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
+				instanceState := extractInstanceState(instance.State)
 
 
 				instances = append(instances, Ec2Instance{
 					InstanceID:         aws.ToString(instance.InstanceId),
 					Name:               name,
 					InstanceType:       string(instance.InstanceType),
-					State:              string(instance.State.Name),
+					State:              instanceState,
 					PrivateIP:          aws.ToString(instance.PrivateIpAddress),
 					PublicIP:           aws.ToString(instance.PublicIpAddress),
 					VpcID:              aws.ToString(instance.VpcId),
@@ -189,6 +190,13 @@ func extractIamProfile(profile *types.IamInstanceProfile) string {
 func extractLaunchTime(launchTime *time.Time) string {
 	if launchTime != nil {
 		return launchTime.Format(time.RFC3339)
+	}
+	return ""
+}
+
+func extractInstanceState(state *types.InstanceState) string {
+	if state != nil {
+		return string(state.Name)
 	}
 	return ""
 }
