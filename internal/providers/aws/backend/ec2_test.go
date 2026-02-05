@@ -143,8 +143,8 @@ func TestEc2Service_ListInstances_Success(t *testing.T) {
 	if inst.VpcID != "vpc-123" {
 		t.Errorf("VpcID = %q", inst.VpcID)
 	}
-	if len(inst.SecurityGroups) != 2 {
-		t.Errorf("expected 2 SGs, got %d", len(inst.SecurityGroups))
+	if len(inst.SecurityGroupIds) != 2 {
+		t.Errorf("expected 2 SGs, got %d", len(inst.SecurityGroupIds))
 	}
 	if len(inst.Volumes) != 1 {
 		t.Errorf("expected 1 volume, got %d", len(inst.Volumes))
@@ -152,8 +152,8 @@ func TestEc2Service_ListInstances_Success(t *testing.T) {
 	if inst.Volumes[0].VolumeID != "vol-abc" {
 		t.Errorf("VolumeID = %q", inst.Volumes[0].VolumeID)
 	}
-	if inst.Volumes[0].Size != "100" {
-		t.Errorf("Volume Size = %q", inst.Volumes[0].Size)
+	if inst.Volumes[0].SizeGb != 100 {
+		t.Errorf("Volume Size = %q", inst.Volumes[0].SizeGb)
 	}
 	if len(inst.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(inst.Tags))
@@ -231,8 +231,8 @@ func TestEc2Service_GetVolumeDetails_Success(t *testing.T) {
 	if volumes[0].VolumeID != "vol-123" {
 		t.Errorf("VolumeID = %q", volumes[0].VolumeID)
 	}
-	if volumes[0].Size != "50" {
-		t.Errorf("Size = %q", volumes[0].Size)
+	if volumes[0].SizeGb != 50 {
+		t.Errorf("Size = %q", volumes[0].SizeGb)
 	}
 	if volumes[0].StorageType != "gp3" {
 		t.Errorf("StorageType = %q", volumes[0].StorageType)

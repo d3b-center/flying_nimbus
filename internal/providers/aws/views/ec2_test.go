@@ -2,8 +2,10 @@ package views
 
 import (
 	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/tui/common"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -67,10 +69,15 @@ func TestResizeViewport(t *testing.T) {
 	}
 }
 
-func TestSetWindowSizes(t *testing.T) {
+func TestEc2UpdateLayout(t *testing.T) {
 	model := &Ec2ViewModel{}
 
-	model.setWindowSizes(10, 10)
+	items := []list.Item{}
+	model.list = list.New(items, list.NewDefaultDelegate(), 0, 0)
+
+	msg := common.ContentWindowSizeMsg{Height: 10, Width: 10}
+
+	model.updateLayout(msg)
 
 	// Just verify the method doesn't panic and sets some values
 	if model.instanceListWidth == 0 {
