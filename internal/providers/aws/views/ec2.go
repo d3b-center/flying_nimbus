@@ -135,6 +135,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(msg) > 0 {
 			m.updateInstanceDetails()
+			m.updateLayout(m.windowSize)
 		}
 
 	case spinner.TickMsg:
