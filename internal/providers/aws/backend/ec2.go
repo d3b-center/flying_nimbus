@@ -90,48 +90,59 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	input := &ec2.DescribeInstancesInput{}
 
 	for {
-		result, err := e.api.DescribeInstances(ctx, input)
+		hasMore, err := e.processPage(ctx, &instances, input)
 		if err != nil {
 			return nil, err
 		}
-
-		for _, reservation := range result.Reservations {
-			for _, instance := range reservation.Instances {
-				tagMap, name := extractTags(instance.Tags)
-				securityGroups := extractSecurityGroups(instance.SecurityGroups)
-				iamProfile := extractIamProfile(instance.IamInstanceProfile)
-				launchTime := extractLaunchTime(instance.LaunchTime)
-				volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
-				instanceState := extractInstanceState(instance.State)
-
-
-				instances = append(instances, Ec2Instance{
-					InstanceID:         aws.ToString(instance.InstanceId),
-					Name:               name,
-					InstanceType:       string(instance.InstanceType),
-					State:              instanceState,
-					PrivateIP:          aws.ToString(instance.PrivateIpAddress),
-					PublicIP:           aws.ToString(instance.PublicIpAddress),
-					VpcID:              aws.ToString(instance.VpcId),
-					Tags:               tagMap,
-					SubnetID:           aws.ToString(instance.SubnetId),
-					IamInstanceProfile: iamProfile,
-					LaunchTime:         launchTime,
-					Volumes:            volumes,
-					SecurityGroupIds:     securityGroups,
-				})
-			}
-		}
-
-		if result.NextToken == nil {
+		if !hasMore {
 			break
 		}
-
-		input.NextToken = result.NextToken
 	}
 
 	return instances, nil
 }
+
+func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, input *ec2.DescribeInstancesInput) (bool, error) {
+	result, err := e.api.DescribeInstances(ctx, input)
+	if err != nil {
+		return false, err
+	}
+
+	for _, reservation := range result.Reservations {
+		for _, instance := range reservation.Instances {
+			tagMap, name := extractTags(instance.Tags)
+			securityGroups := extractSecurityGroups(instance.SecurityGroups)
+			iamProfile := extractIamProfile(instance.IamInstanceProfile)
+			launchTime := extractLaunchTime(instance.LaunchTime)
+			volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
+			instanceState := extractInstanceState(instance.State)
+
+
+			*instances = append(*instances, Ec2Instance{
+				InstanceID:         aws.ToString(instance.InstanceId),
+				Name:               name,
+				InstanceType:       string(instance.InstanceType),
+				State:              instanceState,
+				PrivateIP:          aws.ToString(instance.PrivateIpAddress),
+				PublicIP:           aws.ToString(instance.PublicIpAddress),
+				VpcID:              aws.ToString(instance.VpcId),
+				Tags:               tagMap,
+				SubnetID:           aws.ToString(instance.SubnetId),
+				IamInstanceProfile: iamProfile,
+				LaunchTime:         launchTime,
+				Volumes:            volumes,
+				SecurityGroupIds:     securityGroups,
+			})
+		}
+	}
+
+	if result.NextToken != nil {
+		input.NextToken = result.NextToken
+		return true, nil
+	}
+
+	return false, nil
+} 
 
 func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
 	var volumeIds []string
