@@ -16,6 +16,14 @@ type AwsProviderModel struct {
 	menu list.Model
 }
 
+func (m AwsProviderModel) Title() string {
+	return "AWS"
+}
+
+func (m AwsProviderModel) Commands() common.Commands {
+	return make(map[string]string)
+}
+
 func (m AwsProviderModel) Init() tea.Cmd {
 	return nil
 }
@@ -55,21 +63,22 @@ func NewAWSProviderModel(appService *app.App) AwsProviderModel {
 		common.NewNavItem(
 			"EC2",
 			"Manage EC2 Resources",
-			func(appService *app.App) tea.Model {
-				return views.InitEc2ViewModel(appService)
+			func(appService *app.App) common.NimbusModel {
+				// NewAWSProviderModel Please Remove (dummy model)
+				return NewAWSProviderModel(appService)
 			},
 		),
 		common.NewNavItem(
 			"RDS",
 			"Manage RDS Resources",
-			func(appService *app.App) tea.Model {
+			func(appService *app.App) common.NimbusModel {
 				return views.InitRdsViewModel(appService)
 			},
 		),
 		common.NewNavItem(
 			"Service Catalog",
 			"Service Catalog",
-			func(appService *app.App) tea.Model {
+			func(appService *app.App) common.NimbusModel {
 				// NewAWSProviderModel Please Remove (dummy model)
 				return NewAWSProviderModel(appService)
 			},

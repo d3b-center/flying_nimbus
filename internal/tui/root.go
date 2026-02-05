@@ -74,7 +74,35 @@ func (m RootModel) View() string {
 	}
 	consoleView := common.RenderDevConsole(lines, constants.WindowSize.Width, consoleHeight)
 
-	return lipgloss.JoinVertical(lipgloss.Top, content, consoleView)
+	return lipgloss.JoinVertical(lipgloss.Top, renderTitleBar(current, m.WindowSize.Width), content, consoleView)
+}
+
+func renderTitleBar(m tea.Model, width int) string {
+	nimbus, ok := m.(common.NimbusModel)
+	if !ok {
+		return ""
+	}
+	title := fmt.Sprintf(" ☁️ Flying Nimbus - %s", nimbus.Title())
+
+	left := lipgloss.NewStyle().
+		Bold(true).
+		Render(title)
+
+	right := lipgloss.NewStyle().
+		Render("prod / us-east-1")
+
+	titleBar := lipgloss.JoinHorizontal(lipgloss.Left, left, lipgloss.NewStyle().Width(max(0, width-lipgloss.Width(left)-lipgloss.Width(right)-4)).Render(""),
+		right,
+	)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		//Padding(0, 1).
+		Height(constants.TitleBarHeight).
+		Width(width).
+		Render(titleBar)
+
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -250,7 +278,7 @@ func computeLayout(
 
 	content := common.ContentWindowSizeMsg{
 		Width:  usableWidth,
-		Height: usableHeight - devHeight,
+		Height: usableHeight - devHeight - constants.TitleBarHeight,
 	}
 
 	window := tea.WindowSizeMsg{

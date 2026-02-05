@@ -10,6 +10,8 @@ import (
 var WindowSize tea.WindowSizeMsg
 var DocStyle = lipgloss.NewStyle().Margin(2, 2)
 
+const TitleBarHeight = 1
+
 type keymap struct {
 	Enter            key.Binding
 	Back             key.Binding

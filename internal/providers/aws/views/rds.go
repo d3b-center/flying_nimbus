@@ -29,6 +29,14 @@ type RdsViewModel struct {
 	sgs               map[string]*aws.SecurityGroup
 }
 
+func (m RdsViewModel) Title() string {
+	return "RDS Management"
+}
+
+func (m RdsViewModel) Commands() common.Commands {
+	return make(map[string]string)
+}
+
 // Messages returned from async commands.
 type (
 	rdsInstancesLoadedMsg   []list.Item

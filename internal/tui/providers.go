@@ -16,19 +16,27 @@ type ProvidersModel struct {
 	list list.Model
 }
 
+func (m ProvidersModel) Title() string {
+	return "Providers"
+}
+
+func (m ProvidersModel) Commands() common.Commands {
+	return make(map[string]string)
+}
+
 func NewProvidersModel(application *app.App) ProvidersModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"aws",
 			"Amazon Web Services",
-			func(application *app.App) tea.Model {
+			func(application *app.App) common.NimbusModel {
 				return aws.NewAWSProviderModel(application)
 			},
 		),
 		common.NewNavItem(
 			"azure",
 			"Azure (not good)",
-			func(a *app.App) tea.Model {
+			func(a *app.App) common.NimbusModel {
 				return aws.NewAWSProviderModel(a)
 			},
 		),
