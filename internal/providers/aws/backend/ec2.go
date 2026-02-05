@@ -24,12 +24,12 @@ type Ec2Instance struct {
 	IamInstanceProfile string
 	LaunchTime         string
 	Volumes            []EbsVolume
-	SecurityGroupIds     []string
+	SecurityGroupIds   []string
 }
 
 type EbsVolume struct {
 	VolumeID    string
-	SizeGb        int32
+	SizeGb      int32
 	StorageType string
 }
 
@@ -117,7 +117,6 @@ func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, i
 			volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
 			instanceState := extractInstanceState(instance.State)
 
-
 			*instances = append(*instances, Ec2Instance{
 				InstanceID:         aws.ToString(instance.InstanceId),
 				Name:               name,
@@ -131,7 +130,7 @@ func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, i
 				IamInstanceProfile: iamProfile,
 				LaunchTime:         launchTime,
 				Volumes:            volumes,
-				SecurityGroupIds:     securityGroups,
+				SecurityGroupIds:   securityGroups,
 			})
 		}
 	}
@@ -142,7 +141,7 @@ func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, i
 	}
 
 	return false, nil
-} 
+}
 
 func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
 	var volumeIds []string

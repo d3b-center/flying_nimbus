@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-
 const instanceListWidthRatio = 0.25
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.

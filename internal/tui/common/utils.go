@@ -33,7 +33,6 @@ var (
 				PaddingBottom(1)
 )
 
-
 // KVOption configures the behavior of the KV renderer.
 type KVOption func(*kvConfig)
 

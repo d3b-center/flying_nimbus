@@ -49,7 +49,7 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 
 	windowSize := common.ContentWindowSizeMsg{
 		Height: constants.WindowSize.Height,
-		Width: constants.WindowSize.Width,
+		Width:  constants.WindowSize.Width,
 	}
 
 	loader := spinner.New()
@@ -65,7 +65,7 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 		isLoading:      true,
 		detailsFocused: false,
 		detailViewport: vp,
-		windowSize : windowSize,
+		windowSize:     windowSize,
 	}
 	m.updateLayout(windowSize)
 
@@ -250,24 +250,24 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg.String() {
-		case "right":
-			slog.Debug("Focus on details view")
-			m.detailsFocused = true
-		case "left":
-			slog.Debug("Focus on instances list")
-			m.detailsFocused = false
-		case "down":
-			if m.detailsFocused {
-				m.detailViewport.ViewDown()
-			} else {
-				m.list, cmd = m.list.Update(msg)
-			}
-		case "up":
-			if m.detailsFocused {
-				m.detailViewport.ViewUp()
-			} else {
-				m.list, cmd = m.list.Update(msg)
-			}
+	case "right":
+		slog.Debug("Focus on details view")
+		m.detailsFocused = true
+	case "left":
+		slog.Debug("Focus on instances list")
+		m.detailsFocused = false
+	case "down":
+		if m.detailsFocused {
+			m.detailViewport.ViewDown()
+		} else {
+			m.list, cmd = m.list.Update(msg)
 		}
+	case "up":
+		if m.detailsFocused {
+			m.detailViewport.ViewUp()
+		} else {
+			m.list, cmd = m.list.Update(msg)
+		}
+	}
 	return cmd
 }
