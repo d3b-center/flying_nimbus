@@ -39,7 +39,7 @@ type (
 )
 
 var (
-	focusedColor = lipgloss.Color("62")
+	focusedColor   = lipgloss.Color("62")
 	unfocusedColor = lipgloss.Color("240")
 )
 
