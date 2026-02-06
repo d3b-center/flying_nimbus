@@ -47,6 +47,8 @@ func InitApp(verbose bool) (*App, error) {
 		return nil, err
 	}
 
+	slog.Debug("App initialized")
+
 	return &App{
 		Logger:     logger,
 		LogBuffer:  buffer,

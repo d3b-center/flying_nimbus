@@ -15,18 +15,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
-	instancesListStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-	instanceDetailStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-)
-
 const instanceListWidthRatio = 0.25
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
@@ -62,7 +50,7 @@ func InitRdsViewModel(appService *app.App) RdsViewModel {
 	}
 
 	loader := spinner.New()
-	loader.Style = spinnerStyle
+	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Dot
 
 	m := RdsViewModel{
@@ -105,8 +93,8 @@ func (m RdsViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
+	left := common.InstancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
+	right := common.InstanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
@@ -179,8 +167,8 @@ func gatherSecurityGroupIds(items []list.Item) []string {
 	return out
 }
 
-// generateInstanceDetail generates the detail panel for a selected RDS instance.
-func generateInstanceDetail(selectedItem list.Item, sgs map[string]*aws.SecurityGroup) string {
+// generateRdsInstanceDetail generates the detail panel for a selected RDS instance.
+func generateRdsInstanceDetail(selectedItem list.Item, sgs map[string]*aws.SecurityGroup) string {
 	// Skeleton detail sections
 	if selectedItem == nil {
 		return "No Info"
@@ -191,21 +179,10 @@ func generateInstanceDetail(selectedItem list.Item, sgs map[string]*aws.Security
 		return "No Info"
 	}
 
-	var (
-		headerStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("62")).
-				Foreground(lipgloss.Color("230")).
-				Padding(0, 1)
-		sectionHeaderStyle = lipgloss.NewStyle().
-					Bold(true).
-					Foreground(lipgloss.Color("62")).
-					PaddingBottom(1)
-	)
-
 	rows := []string{
-		headerStyle.Render("Instance Details"),
+		common.HeaderStyle.Render("Instance Details"),
 		"",
-		sectionHeaderStyle.Render("General Info"),
+		common.SectionHeaderStyle.Render("General Info"),
 		common.KV("DB Identifier", rds.Id),
 		common.KV("Engine", rds.DbEngine),
 		common.KV("Version", rds.DbVersion),
@@ -216,16 +193,16 @@ func generateInstanceDetail(selectedItem list.Item, sgs map[string]*aws.Security
 		common.KV("Port", fmt.Sprintf("%d", rds.Port)),
 		common.KV("Is Public", fmt.Sprintf("%t", rds.IsPubliclyAccessible)),
 		"",
-		sectionHeaderStyle.Render("Network"),
+		common.SectionHeaderStyle.Render("Network"),
 		common.KV("VPC", rds.VpcID),
 		"",
 	}
 
-	rows = append(rows, subnetSection(rds.SubnetIds, sectionHeaderStyle)...)
+	rows = append(rows, subnetSection(rds.SubnetIds, common.SectionHeaderStyle)...)
 
 	rows = append(rows, "")
 
-	rows = append(rows, securityGroupRulesSection(rds.SecurityGroupIds, sgs, sectionHeaderStyle)...)
+	rows = append(rows, securityGroupRulesSection(rds.SecurityGroupIds, sgs, common.SectionHeaderStyle)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }

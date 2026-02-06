@@ -1,0 +1,42 @@
+package views
+
+import (
+	"encoding/json"
+	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/tui/common"
+	"fmt"
+	"log/slog"
+)
+
+// GenerateTagRows takes tags and formats them for rendering
+func GenerateTagRows(tags map[string]string) []string {
+	var rows []string
+	debug, _ := json.Marshal(tags)
+	slog.Debug(string(debug))
+
+	if len(tags) == 0 {
+		slog.Debug("No tags found")
+		return append(rows, "    None")
+	}
+
+	for key, value := range tags {
+		slog.Debug("Appending tag", "key", key, "value", value)
+		rows = append(rows, common.KV("  "+key, value))
+	}
+
+	return rows
+}
+
+// GenerateEbsVolumeRows takes volumes and formats their data for rendering
+func GenerateEbsVolumeRows(volumes []aws.EbsVolume) []string {
+	var rows []string
+
+	for _, vol := range volumes {
+		rows = append(rows,
+			fmt.Sprintf("  • %s", vol.VolumeID),
+			fmt.Sprintf("    Size: %d GB | Type: %s ", vol.SizeGb, vol.StorageType),
+		)
+	}
+
+	return rows
+}
