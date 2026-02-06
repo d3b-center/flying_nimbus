@@ -18,6 +18,7 @@ import (
 
 const ec2InstanceListWidthRatio = 0.25
 
+// Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
 	app               *app.App
 	list              list.Model
@@ -37,6 +38,12 @@ type (
 	ec2InstancesLoadedMsg []list.Item
 )
 
+var (
+	focusedColor = lipgloss.Color("62")
+	unfocusedColor = lipgloss.Color("240")
+)
+
+// Creates a new EC2 view model
 func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	slog.Debug("Initialize custom Ec2 view model")
 	items := []list.Item{}
@@ -72,6 +79,7 @@ func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
 	return m
 }
 
+// fetchEc2InstancesCmd returns a command that fetches EC2 instances.
 func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.Cmd {
 	return func() tea.Msg {
 		instances, _ := ec2Service.ListInstances(ctx)
@@ -79,11 +87,13 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
+// Init initializes the EC2 view model.
 func (m Ec2ViewModel) Init() tea.Cmd {
 	slog.Debug("Initialize Ec2 BubbleTea Model")
 	return tea.Batch(m.loader.Tick, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2))
 }
 
+// View renders the EC2 view.
 func (m Ec2ViewModel) View() string {
 	if m.isLoading {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
@@ -105,11 +115,11 @@ func (m Ec2ViewModel) View() string {
 		Height(contentHeight)
 
 	if m.detailsFocused {
-		detailStyle = detailStyle.BorderForeground(lipgloss.Color("62"))
-		listStyle = listStyle.BorderForeground(lipgloss.Color("240"))
+		detailStyle = detailStyle.BorderForeground(focusedColor)
+		listStyle = listStyle.BorderForeground(unfocusedColor)
 	} else {
-		listStyle = listStyle.BorderForeground(lipgloss.Color("62"))
-		detailStyle = detailStyle.BorderForeground(lipgloss.Color("240"))
+		listStyle = listStyle.BorderForeground(focusedColor)
+		detailStyle = detailStyle.BorderForeground(unfocusedColor)
 	}
 
 	left := listStyle.Render(m.list.View())
@@ -118,6 +128,7 @@ func (m Ec2ViewModel) View() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
+// Update handles messages and updates the model state.
 func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -155,6 +166,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// ec2InstancesToItems converts EC2 instances to list items.
 func ec2InstancesToItems(instances []aws.Ec2Instance) []list.Item {
 	items := make([]list.Item, len(instances))
 	for i, instance := range instances {
@@ -163,6 +175,7 @@ func ec2InstancesToItems(instances []aws.Ec2Instance) []list.Item {
 	return items
 }
 
+// generateEc2InstanceDetail generates formatted details for an EC2 instance.
 func generateEc2InstanceDetail(selectedItem list.Item) string {
 	if selectedItem == nil {
 		return "No Info"
@@ -211,6 +224,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
+// resizeViewport updates the viewport dimensions.
 func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	if !m.ready {
 		m.detailViewport = viewport.New(width, height)
@@ -221,6 +235,7 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 	}
 }
 
+// updateLayout recalculates and applies layout dimensions.
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
@@ -241,12 +256,14 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.detailViewport.SetContent(m.instanceDetail)
 }
 
+// updateInstanceDetails regenerates and displays instance details.
 func (m *Ec2ViewModel) updateInstanceDetails() {
 	m.instanceDetail = generateEc2InstanceDetail(m.list.SelectedItem())
 	m.detailViewport.SetContent(m.instanceDetail)
 	m.detailViewport.GotoTop()
 }
 
+// handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg.String() {
@@ -258,13 +275,13 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		m.detailsFocused = false
 	case "down":
 		if m.detailsFocused {
-			m.detailViewport.ViewDown()
+			m.detailViewport.PageDown()
 		} else {
 			m.list, cmd = m.list.Update(msg)
 		}
 	case "up":
 		if m.detailsFocused {
-			m.detailViewport.ViewUp()
+			m.detailViewport.PageUp()
 		} else {
 			m.list, cmd = m.list.Update(msg)
 		}

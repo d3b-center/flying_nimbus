@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+// Ec2Instance represents an EC2 instance with its metadata.
 type Ec2Instance struct {
 	InstanceID         string
 	Name               string
@@ -27,6 +28,7 @@ type Ec2Instance struct {
 	SecurityGroupIds   []string
 }
 
+// EbsVolume represents an EBS volume attached to an instance.
 type EbsVolume struct {
 	VolumeID    string
 	SizeGb      int32
@@ -38,22 +40,27 @@ type ec2API interface {
 	DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error)
 }
 
+// Ec2Service provides methods for interacting with EC2 instances.
 type Ec2Service struct {
 	api ec2API
 }
 
+// Title returns the instance ID for list display.
 func (i Ec2Instance) Title() string {
 	return i.InstanceID
 }
 
+// Description returns the instance name for list display.
 func (i Ec2Instance) Description() string {
 	return i.Name
 }
 
+// FilterValue returns the instance ID for list filtering.
 func (i Ec2Instance) FilterValue() string {
 	return i.InstanceID
 }
 
+// InitEc2Service creates a new EC2 service client.
 func InitEc2Service(cfg aws.Config) *Ec2Service {
 	slog.Debug("Initializing EC2 Service")
 	client := ec2.NewFromConfig(cfg)
@@ -62,6 +69,7 @@ func InitEc2Service(cfg aws.Config) *Ec2Service {
 	}
 }
 
+// GetVolumeDetails retrieves detailed information for the given volume IDs.
 func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([]EbsVolume, error) {
 	input := &ec2.DescribeVolumesInput{
 		VolumeIds: volumeIDs,
@@ -84,6 +92,7 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 	return volumes, nil
 }
 
+// ListInstances retrieves all EC2 instances with pagination.
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	var instances []Ec2Instance
 
@@ -102,6 +111,7 @@ func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	return instances, nil
 }
 
+// processPage fetches and processes a single page of EC2 instances.
 func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, input *ec2.DescribeInstancesInput) (bool, error) {
 	result, err := e.api.DescribeInstances(ctx, input)
 	if err != nil {
@@ -143,6 +153,7 @@ func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, i
 	return false, nil
 }
 
+// getEbsVolumeData retrieves volume details for the given block device mappings.
 func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
 	var volumeIds []string
 	for _, bdm := range bdms {
@@ -164,6 +175,7 @@ func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceB
 	return volumes
 }
 
+// extractTags converts EC2 tags to a map and extracts the Name tag.
 func extractTags(tags []types.Tag) (map[string]string, string) {
 	tagMap := make(map[string]string)
 	name := ""
@@ -180,6 +192,7 @@ func extractTags(tags []types.Tag) (map[string]string, string) {
 	return tagMap, name
 }
 
+// extractSecurityGroups extracts security group IDs from group identifiers.
 func extractSecurityGroups(sgs []types.GroupIdentifier) []string {
 	var securityGroupIds []string
 	for _, sg := range sgs {
@@ -190,6 +203,7 @@ func extractSecurityGroups(sgs []types.GroupIdentifier) []string {
 	return securityGroupIds
 }
 
+// extractIamProfile extracts the IAM instance profile ARN.
 func extractIamProfile(profile *types.IamInstanceProfile) string {
 	if profile != nil && profile.Arn != nil {
 		return *profile.Arn
@@ -197,6 +211,7 @@ func extractIamProfile(profile *types.IamInstanceProfile) string {
 	return ""
 }
 
+// extractLaunchTime formats the instance launch time as RFC3339.
 func extractLaunchTime(launchTime *time.Time) string {
 	if launchTime != nil {
 		return launchTime.Format(time.RFC3339)
@@ -204,6 +219,7 @@ func extractLaunchTime(launchTime *time.Time) string {
 	return ""
 }
 
+// extractInstanceState extracts the instance state name.
 func extractInstanceState(state *types.InstanceState) string {
 	if state != nil {
 		return string(state.Name)

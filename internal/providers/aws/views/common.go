@@ -8,6 +8,7 @@ import (
 	"log/slog"
 )
 
+// GenerateTagRows takes tags and formats them for rendering
 func GenerateTagRows(tags map[string]string) []string {
 	var rows []string
 	debug, _ := json.Marshal(tags)
@@ -26,6 +27,7 @@ func GenerateTagRows(tags map[string]string) []string {
 	return rows
 }
 
+// GenerateEbsVolumeRows takes volumes and formats their data for rendering
 func GenerateEbsVolumeRows(volumes []aws.EbsVolume) []string {
 	var rows []string
 
