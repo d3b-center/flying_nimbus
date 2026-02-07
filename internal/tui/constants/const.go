@@ -2,15 +2,15 @@ package constants
 
 import (
 	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 // WindowSize store the size of the terminal window
-var WindowSize tea.WindowSizeMsg
 var DocStyle = lipgloss.NewStyle().Margin(2, 2)
 
-const TitleBarHeight = 1
+const TitleBarInnerHeight = 1
+const TitleBarBorderHeight = 2 // top + bottom
+const TitleBarHeight = TitleBarBorderHeight + TitleBarInnerHeight
 
 type keymap struct {
 	Enter            key.Binding

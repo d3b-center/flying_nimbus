@@ -5,6 +5,8 @@ import (
 	"flying_nimbus/internal/providers/aws/views"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"fmt"
+	"log/slog"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -12,8 +14,9 @@ import (
 )
 
 type AwsProviderModel struct {
-	app  *app.App
-	menu list.Model
+	app    *app.App
+	menu   list.Model
+	window common.ContentWindowSizeMsg
 }
 
 func (m AwsProviderModel) Title() string {
@@ -21,7 +24,7 @@ func (m AwsProviderModel) Title() string {
 }
 
 func (m AwsProviderModel) Commands() common.Commands {
-	return make(map[string]string)
+	return make([]key.Binding, 0)
 }
 
 func (m AwsProviderModel) Init() tea.Cmd {
@@ -29,13 +32,15 @@ func (m AwsProviderModel) Init() tea.Cmd {
 }
 
 func (m AwsProviderModel) View() string {
-	m.menu.SetSize(constants.WindowSize.Width, constants.WindowSize.Height)
+	m.menu.SetSize(m.window.Width, m.window.Height)
 	return m.menu.View() + "\n"
 }
 
 func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
+	case common.ContentWindowSizeMsg:
+		slog.Debug(fmt.Sprintf("Window Size ProvidersInit %v", msg))
+		m.window = msg
 		top, right, bottom, left := constants.DocStyle.GetMargin()
 		m.menu.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
 	}
@@ -48,7 +53,7 @@ func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			item := m.menu.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
 				return common.NavigateMsg{
-					Model: item.Model(m.app),
+					Model: item.Model(m.app, m.window),
 				}
 			}
 		}
@@ -58,37 +63,39 @@ func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func NewAWSProviderModel(appService *app.App) AwsProviderModel {
+func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSizeMsg) AwsProviderModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"EC2",
 			"Manage EC2 Resources",
-			func(appService *app.App) common.NimbusModel {
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
 				// NewAWSProviderModel Please Remove (dummy model)
-				return NewAWSProviderModel(appService)
+				return NewAWSProviderModel(appService, windowSize)
 			},
 		),
 		common.NewNavItem(
 			"RDS",
 			"Manage RDS Resources",
-			func(appService *app.App) common.NimbusModel {
-				return views.InitRdsViewModel(appService)
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return views.InitRdsViewModel(appService, windowSize)
 			},
 		),
 		common.NewNavItem(
 			"Service Catalog",
 			"Service Catalog",
-			func(appService *app.App) common.NimbusModel {
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
 				// NewAWSProviderModel Please Remove (dummy model)
-				return NewAWSProviderModel(appService)
+				return NewAWSProviderModel(appService, windowSize)
 			},
 		),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), constants.WindowSize.Width, constants.WindowSize.Height)
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Width, windowSize.Height)
 	l.Title = "Select Capability"
+	l.SetShowHelp(false)
 	return AwsProviderModel{
-		app:  appService,
-		menu: l,
+		app:    appService,
+		menu:   l,
+		window: windowSize,
 	}
 }

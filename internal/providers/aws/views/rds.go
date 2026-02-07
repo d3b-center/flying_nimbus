@@ -3,12 +3,13 @@ package views
 import (
 	"context"
 	"flying_nimbus/internal/app"
-	"flying_nimbus/internal/providers/aws/backend"
+	aws "flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,7 @@ func (m RdsViewModel) Title() string {
 }
 
 func (m RdsViewModel) Commands() common.Commands {
-	return make(map[string]string)
+	return make([]key.Binding, 0)
 }
 
 // Messages returned from async commands.
@@ -43,31 +44,26 @@ type (
 	securityGroupsLoadedMsg map[string]*aws.SecurityGroup
 )
 
-func InitRdsViewModel(appService *app.App) RdsViewModel {
+func InitRdsViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) RdsViewModel {
 	items := []list.Item{}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
 	l.Title = "Instances"
 	l.SetShowTitle(true)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
-
-	windowSize := common.ContentWindowSizeMsg{
-		Height: constants.WindowSize.Height,
-		Width:  constants.WindowSize.Width,
-	}
 
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Dot
 
 	m := RdsViewModel{
-		app:        appService,
-		loader:     loader,
-		list:       l,
-		isLoading:  true,
-		windowSize: windowSize,
+		app:       appService,
+		loader:    loader,
+		list:      l,
+		isLoading: true,
 	}
+	slog.Debug(fmt.Sprintf("Window Size Init %v", windowSize))
 	m.updateLayout(windowSize)
 
 	return m
@@ -101,8 +97,9 @@ func (m RdsViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	left := common.InstancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := common.InstanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
+	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
+	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
+	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }

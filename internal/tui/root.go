@@ -21,20 +21,23 @@ const (
 )
 
 func InitRoot(appService *app.App) RootModel {
+	slog.Debug("InitRoot ")
 	stack := make([]tea.Model, 0, 3)
 
-	// Rename to not conflict with Standard library Context
 	if appService == nil {
 		appService = &app.App{}
 	}
-	stack = append(stack, NewProvidersModel(appService))
 
-	return RootModel{
+	m := RootModel{
 		appService:     appService,
 		stack:          stack,
 		showDevConsole: false,
 	}
 
+	stack = append(stack, NewProvidersModel(appService, m.ContentWindowSize))
+	m.stack = stack
+
+	return m
 }
 
 type RootModel struct {
@@ -59,10 +62,11 @@ func (m RootModel) View() string {
 	current := m.stack[len(m.stack)-1]
 	content := current.View()
 
-	if constants.WindowSize.Width == 0 || constants.WindowSize.Height == 0 {
-		return content
-	}
+	//if constants.WindowSize.Width == 0 || constants.WindowSize.Height == 0 {
+	//	return content
+	//}
 
+	contentBorder := lipgloss.NewStyle().Height(m.ContentWindowSize.Height)
 	consoleHeight := m.devConsoleHeight
 	if !m.showDevConsole {
 		consoleHeight = 0
@@ -72,9 +76,8 @@ func (m RootModel) View() string {
 	if m.appService != nil && m.appService.LogBuffer != nil {
 		lines = m.appService.LogBuffer.Lines()
 	}
-	consoleView := common.RenderDevConsole(lines, constants.WindowSize.Width, consoleHeight)
-
-	return lipgloss.JoinVertical(lipgloss.Top, renderTitleBar(current, m.WindowSize.Width), content, consoleView)
+	consoleView := common.RenderDevConsole(lines, m.WindowSize.Width, consoleHeight)
+	return lipgloss.JoinVertical(lipgloss.Top, renderTitleBar(current, m.WindowSize.Width), contentBorder.Render(content), consoleView)
 }
 
 func renderTitleBar(m tea.Model, width int) string {
@@ -99,7 +102,6 @@ func renderTitleBar(m tea.Model, width int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62")).
 		//Padding(0, 1).
-		Height(constants.TitleBarHeight).
 		Width(width).
 		Render(titleBar)
 
@@ -109,23 +111,10 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
-		slog.Info("window resize",
-			slog.Int("width", msg.Width),
-			slog.Int("height", msg.Height),
-		)
-
-		window, content, devHeight := computeLayout(msg, m.showDevConsole)
-
-		constants.WindowSize = tea.WindowSizeMsg{
-			Height: content.Height,
-			Width:  content.Width,
-		}
-		m.WindowSize = window
-		m.ContentWindowSize = content
-		m.devConsoleHeight = devHeight
-		return m, func() tea.Msg {
-			return content
-		}
+		m.computeWindowSize(msg)
+		return m, tea.Batch(func() tea.Msg {
+			return m.ContentWindowSize
+		})
 
 	case common.NavigateMsg:
 		m.stack = append(m.stack, msg.Model)
@@ -144,26 +133,30 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, constants.Keymap.Back):
-			return m, func() tea.Msg {
+			return m, tea.Batch(func() tea.Msg {
 				return common.BackMsg{}
-			}
+			})
 		case key.Matches(msg, constants.Keymap.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, constants.Keymap.ToggleDevConsole):
 			m.showDevConsole = !m.showDevConsole
 
-			_, content, devHeight := computeLayout(
+			content, devHeight := computeLayout(
 				tea.WindowSizeMsg(m.WindowSize),
 				m.showDevConsole,
 			)
 
 			m.devConsoleHeight = devHeight
 			m.ContentWindowSize = content
+			slog.Info("Debug toggle  window resize",
+				slog.Int("Rootwidth", m.WindowSize.Width),
+				slog.Int("Rootheight", m.WindowSize.Height),
+				slog.Int("Contentwidth", content.Width),
+				slog.Int("Contentheight", content.Height),
+				slog.Int("devHeight", devHeight),
+				slog.Int("TitleBarHeight", constants.TitleBarHeight),
+			)
 
-			constants.WindowSize = tea.WindowSizeMsg{
-				Height: content.Height,
-				Width:  content.Width,
-			}
 			return m, tea.Batch(func() tea.Msg {
 				return content
 			})
@@ -176,6 +169,32 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, cmd := current.Update(delegateMsg)
 	m.stack[len(m.stack)-1] = next
 	return m, tea.Batch(cmd)
+}
+
+func (m *RootModel) computeWindowSize(msg tea.WindowSizeMsg) {
+	slog.Info("Root window resize",
+		slog.Int("width", msg.Width),
+		slog.Int("height", msg.Height),
+	)
+	wFrame, hFrame := constants.DocStyle.GetFrameSize()
+	usableHeight := msg.Height - hFrame
+	usableWidth := msg.Width - wFrame
+
+	m.WindowSize = tea.WindowSizeMsg{Height: usableHeight, Width: usableWidth}
+
+	content, devHeight := computeLayout(m.WindowSize, m.showDevConsole)
+	slog.Info("Content window resize... computeWindowSize",
+		slog.Int("Rootwidth", m.WindowSize.Width),
+		slog.Int("Rootheight", m.WindowSize.Height),
+		slog.Int("width", content.Width),
+		slog.Int("height", content.Height),
+		slog.Int("devHeight", devHeight),
+		slog.Int("TitleBarHeight", constants.TitleBarHeight),
+	)
+
+	m.ContentWindowSize = content
+	m.devConsoleHeight = devHeight
+
 }
 
 type runtimeStatsMsg struct{}
@@ -268,11 +287,10 @@ func attrsToAny(attrs []slog.Attr) []any {
 func computeLayout(
 	msg tea.WindowSizeMsg,
 	showDevConsole bool,
-) (tea.WindowSizeMsg, common.ContentWindowSizeMsg, int) {
-	hFrame, wFrame := constants.DocStyle.GetFrameSize()
+) (common.ContentWindowSizeMsg, int) {
 
-	usableHeight := msg.Height - hFrame
-	usableWidth := msg.Width - wFrame
+	usableHeight := msg.Height
+	usableWidth := msg.Width
 
 	devHeight := devConsoleHeight(usableHeight, showDevConsole)
 
@@ -281,10 +299,5 @@ func computeLayout(
 		Height: usableHeight - devHeight - constants.TitleBarHeight,
 	}
 
-	window := tea.WindowSizeMsg{
-		Width:  usableWidth,
-		Height: usableHeight,
-	}
-
-	return window, content, devHeight
+	return content, devHeight
 }

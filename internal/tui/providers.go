@@ -12,8 +12,9 @@ import (
 )
 
 type ProvidersModel struct {
-	app  *app.App
-	list list.Model
+	app    *app.App
+	list   list.Model
+	window common.ContentWindowSizeMsg
 }
 
 func (m ProvidersModel) Title() string {
@@ -21,33 +22,35 @@ func (m ProvidersModel) Title() string {
 }
 
 func (m ProvidersModel) Commands() common.Commands {
-	return make(map[string]string)
+	return make([]key.Binding, 0)
 }
 
-func NewProvidersModel(application *app.App) ProvidersModel {
+func NewProvidersModel(application *app.App, contentWindowSize common.ContentWindowSizeMsg) ProvidersModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"aws",
 			"Amazon Web Services",
-			func(application *app.App) common.NimbusModel {
-				return aws.NewAWSProviderModel(application)
+			func(application *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return aws.NewAWSProviderModel(application, windowSize)
 			},
 		),
 		common.NewNavItem(
 			"azure",
 			"Azure (not good)",
-			func(a *app.App) common.NimbusModel {
-				return aws.NewAWSProviderModel(a)
+			func(a *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return aws.NewAWSProviderModel(a, windowSize)
 			},
 		),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), constants.WindowSize.Width, constants.WindowSize.Height)
+	l := list.New(items, list.NewDefaultDelegate(), contentWindowSize.Width, contentWindowSize.Height)
 	l.Title = "Select Provider"
+	l.SetShowHelp(false)
 
 	return ProvidersModel{
-		app:  application,
-		list: l,
+		app:    application,
+		list:   l,
+		window: contentWindowSize,
 	}
 }
 
@@ -56,13 +59,14 @@ func (m ProvidersModel) Init() tea.Cmd {
 }
 
 func (m ProvidersModel) View() string {
-	m.list.SetSize(constants.WindowSize.Width, constants.WindowSize.Height)
+	m.list.SetSize(m.window.Width, m.window.Height)
 	return m.list.View() + "\n"
 }
 
 func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
+		m.window = msg
 		m.list.SetSize(msg.Width, msg.Height)
 	case tea.KeyMsg:
 		switch {
@@ -70,7 +74,7 @@ func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			item := m.list.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
 				return common.NavigateMsg{
-					Model: item.Model(m.app),
+					Model: item.Model(m.app, m.window),
 				}
 			}
 		}

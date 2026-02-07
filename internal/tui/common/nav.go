@@ -20,10 +20,10 @@ type ContentWindowSizeMsg struct {
 type NavItem struct {
 	title string
 	desc  string
-	Model func(app *app.App) NimbusModel
+	Model func(app *app.App, currentWindowSize ContentWindowSizeMsg) NimbusModel
 }
 
-func NewNavItem(title string, desc string, model func(*app.App) NimbusModel) NavItem {
+func NewNavItem(title string, desc string, model func(*app.App, ContentWindowSizeMsg) NimbusModel) NavItem {
 	return NavItem{
 		title: title,
 		desc:  desc,
