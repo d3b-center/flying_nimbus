@@ -159,6 +159,8 @@ func (m RootModel) renderDevConsole() string {
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	current := m.stack[len(m.stack)-1]
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -183,33 +185,45 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runtimeStatsCmd()
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, DefaultKeymap.Back):
-			return m, tea.Batch(func() tea.Msg {
-				return common.BackMsg{}
-			})
-		case key.Matches(msg, DefaultKeymap.Quit):
-			return m, tea.Quit
-		case key.Matches(msg, DefaultKeymap.ToggleDevConsole):
-			m.showDevConsole = !m.showDevConsole
-
-			content, devHeight := computeLayout(
-				tea.WindowSizeMsg(m.WindowSize),
-				m.showDevConsole,
-			)
-
-			m.devConsoleHeight = devHeight
-			m.ContentWindowSize = content
-
-			return m, tea.Batch(func() tea.Msg {
-				return content
-			})
 		case key.Matches(msg, DefaultKeymap.ShowFullHelp):
 			m.help.ShowAll = !m.help.ShowAll
+			return m, nil
+
+		case key.Matches(msg, DefaultKeymap.Quit):
+			return m, tea.Quit
+
+		}
+
+		strategy := common.RouteGlobalFirst
+		if nimbus, ok := current.(common.NimbusModel); ok {
+			strategy = nimbus.InputRoutingStrategy()
+		}
+
+		if strategy == common.RouteGlobalFirst {
+			switch {
+			case key.Matches(msg, DefaultKeymap.Back):
+				return m, tea.Batch(func() tea.Msg {
+					return common.BackMsg{}
+				})
+			case key.Matches(msg, DefaultKeymap.ToggleDevConsole):
+				m.showDevConsole = !m.showDevConsole
+
+				content, devHeight := computeLayout(
+					tea.WindowSizeMsg(m.WindowSize),
+					m.showDevConsole,
+				)
+
+				m.devConsoleHeight = devHeight
+				m.ContentWindowSize = content
+
+				return m, tea.Batch(func() tea.Msg {
+					return content
+				})
+			}
 		}
 	}
 
 	// delegate everything else
-	current := m.stack[len(m.stack)-1]
 	delegateMsg := msg
 	next, cmd := current.Update(delegateMsg)
 	m.stack[len(m.stack)-1] = next

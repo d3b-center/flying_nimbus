@@ -20,14 +20,20 @@ const instanceListWidthRatio = 0.25
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
 type RdsViewModel struct {
-	app               *app.App
-	list              list.Model
-	loader            spinner.Model
-	isLoading         bool
-	windowSize        common.ContentWindowSizeMsg
-	instanceListWidth int
-	detailsWidth      int
-	sgs               map[string]*aws.SecurityGroup
+	app                  *app.App
+	list                 list.Model
+	loader               spinner.Model
+	isLoading            bool
+	windowSize           common.ContentWindowSizeMsg
+	instanceListWidth    int
+	detailsWidth         int
+	sgs                  map[string]*aws.SecurityGroup
+	inputRoutingStrategy common.InputRoutingStrategy
+}
+
+func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return m.inputRoutingStrategy
+
 }
 
 func (m RdsViewModel) Title() string {
@@ -58,10 +64,11 @@ func InitRdsViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	loader.Spinner = spinner.Dot
 
 	m := RdsViewModel{
-		app:       appService,
-		loader:    loader,
-		list:      l,
-		isLoading: true,
+		app:                  appService,
+		loader:               loader,
+		list:                 l,
+		isLoading:            true,
+		inputRoutingStrategy: common.RouteGlobalFirst,
 	}
 	slog.Debug(fmt.Sprintf("Window Size Init %v", windowSize))
 	m.updateLayout(windowSize)
@@ -99,7 +106,7 @@ func (m RdsViewModel) View() string {
 
 	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
 	left := instancesListStyle.Render(m.list.View())
-	right := instanceDetailStyle.Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
+	right := instanceDetailStyle.Height(m.windowSize.Height).Width(m.windowSize.Width).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
@@ -125,6 +132,13 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loader, cmd = m.loader.Update(msg)
 	default:
 		m.list, cmd = m.list.Update(msg)
+	}
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	} else {
+		m.inputRoutingStrategy = common.RouteGlobalFirst
 	}
 	return m, cmd
 }

@@ -19,6 +19,10 @@ type AwsProviderModel struct {
 	window common.ContentWindowSizeMsg
 }
 
+func (m AwsProviderModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return common.RouteGlobalFirst
+}
+
 func (m AwsProviderModel) Title() string {
 	return "AWS"
 }

@@ -17,6 +17,10 @@ type ProvidersModel struct {
 	window common.ContentWindowSizeMsg
 }
 
+func (m ProvidersModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return common.RouteGlobalFirst
+}
+
 func (m ProvidersModel) Title() string {
 	return "Providers"
 }

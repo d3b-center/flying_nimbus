@@ -28,5 +28,5 @@ type NimbusModel interface {
 	tea.Model
 	Titled
 	Commanded
-	// InputRoutingStrategy() InputRoutingStrategy
+	InputRoutingStrategy() InputRoutingStrategy
 }
