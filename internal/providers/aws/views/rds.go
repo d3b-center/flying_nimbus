@@ -98,8 +98,8 @@ func (m RdsViewModel) View() string {
 	}
 
 	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
-	left := instancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
+	left := instancesListStyle.Render(m.list.View())
+	right := instanceDetailStyle.Height(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }

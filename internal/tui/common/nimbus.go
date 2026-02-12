@@ -15,8 +15,18 @@ type Commanded interface {
 	Commands() Commands
 }
 
+type InputRoutingStrategy int
+
+const (
+	// The App/Root handles keys before passing leftovers down
+	RouteGlobalFirst InputRoutingStrategy = iota
+	// The active component handles keys before passing leftovers up
+	RouteFocusedFirst
+)
+
 type NimbusModel interface {
 	tea.Model
 	Titled
 	Commanded
+	// InputRoutingStrategy() InputRoutingStrategy
 }

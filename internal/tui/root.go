@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -18,6 +19,10 @@ const (
 	devConsoleRatio      = 0.25
 	minDevConsoleHeight  = 3
 	runtimeStatsInterval = 5 * time.Second
+	minHelpBarHeight     = 1
+	TitleBarInnerHeight  = 1
+	TitleBarBorderHeight = 2 // top + bottom
+	TitleBarHeight       = TitleBarBorderHeight + TitleBarInnerHeight
 )
 
 func InitRoot(appService *app.App) RootModel {
@@ -28,10 +33,13 @@ func InitRoot(appService *app.App) RootModel {
 		appService = &app.App{}
 	}
 
+	help := help.New()
+
 	m := RootModel{
 		appService:     appService,
 		stack:          stack,
 		showDevConsole: false,
+		help:           help,
 	}
 
 	stack = append(stack, NewProvidersModel(appService, m.ContentWindowSize))
@@ -48,6 +56,7 @@ type RootModel struct {
 	WindowSize        tea.WindowSizeMsg
 	ContentWindowSize common.ContentWindowSizeMsg
 	devConsoleHeight  int
+	help              help.Model
 }
 
 func (m RootModel) Init() tea.Cmd {
@@ -62,22 +71,19 @@ func (m RootModel) View() string {
 	current := m.stack[len(m.stack)-1]
 	content := current.View()
 
-	//if constants.WindowSize.Width == 0 || constants.WindowSize.Height == 0 {
-	//	return content
-	//}
+	km := GenerateNimbusKeyMap(current)
 
-	contentBorder := lipgloss.NewStyle().Height(m.ContentWindowSize.Height)
-	consoleHeight := m.devConsoleHeight
-	if !m.showDevConsole {
-		consoleHeight = 0
+	consoleView := m.renderDevConsole()
+
+	help := m.renderHelpMinimal(km)
+
+	main := lipgloss.JoinVertical(lipgloss.Left, renderTitleBar(current, m.WindowSize.Width), content, help, consoleView)
+
+	if m.help.ShowAll {
+		return m.renderHelpModal(km)
 	}
 
-	var lines []string
-	if m.appService != nil && m.appService.LogBuffer != nil {
-		lines = m.appService.LogBuffer.Lines()
-	}
-	consoleView := common.RenderDevConsole(lines, m.WindowSize.Width, consoleHeight)
-	return lipgloss.JoinVertical(lipgloss.Top, renderTitleBar(current, m.WindowSize.Width), contentBorder.Render(content), consoleView)
+	return main
 }
 
 func renderTitleBar(m tea.Model, width int) string {
@@ -101,10 +107,55 @@ func renderTitleBar(m tea.Model, width int) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62")).
-		//Padding(0, 1).
 		Width(width).
 		Render(titleBar)
 
+}
+
+func (m RootModel) renderHelpMinimal(km nimbusKeyMap) string {
+
+	isShowAll := m.help.ShowAll
+
+	m.help.ShowAll = false
+
+	m.help.Width = m.WindowSize.Width
+	help := m.help.View(km)
+	m.help.ShowAll = isShowAll
+
+	helpStyle := lipgloss.NewStyle().Padding(1, 0, 0, 2)
+	return helpStyle.Render(help)
+}
+
+func (m RootModel) renderHelpModal(km nimbusKeyMap) string {
+
+	help := m.help.View(km)
+
+	modalContent := lipgloss.JoinVertical(
+		lipgloss.Center,
+		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("62")).Render("HELP & COMMANDS"),
+		"\n",
+		help,
+		"\n",
+		lipgloss.NewStyle().Faint(true).Render("press ? to close"),
+	)
+
+	return common.RenderModal(modalContent, m.WindowSize)
+
+}
+
+func (m RootModel) renderDevConsole() string {
+
+	consoleHeight := m.devConsoleHeight
+	if !m.showDevConsole {
+		consoleHeight = 0
+	}
+
+	// Generate Dev Console
+	var lines []string
+	if m.appService != nil && m.appService.LogBuffer != nil {
+		lines = m.appService.LogBuffer.Lines()
+	}
+	return common.RenderDevConsole(lines, m.WindowSize.Width, consoleHeight)
 }
 
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -132,13 +183,13 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runtimeStatsCmd()
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, constants.Keymap.Back):
+		case key.Matches(msg, DefaultKeymap.Back):
 			return m, tea.Batch(func() tea.Msg {
 				return common.BackMsg{}
 			})
-		case key.Matches(msg, constants.Keymap.Quit):
+		case key.Matches(msg, DefaultKeymap.Quit):
 			return m, tea.Quit
-		case key.Matches(msg, constants.Keymap.ToggleDevConsole):
+		case key.Matches(msg, DefaultKeymap.ToggleDevConsole):
 			m.showDevConsole = !m.showDevConsole
 
 			content, devHeight := computeLayout(
@@ -148,18 +199,12 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.devConsoleHeight = devHeight
 			m.ContentWindowSize = content
-			slog.Info("Debug toggle  window resize",
-				slog.Int("Rootwidth", m.WindowSize.Width),
-				slog.Int("Rootheight", m.WindowSize.Height),
-				slog.Int("Contentwidth", content.Width),
-				slog.Int("Contentheight", content.Height),
-				slog.Int("devHeight", devHeight),
-				slog.Int("TitleBarHeight", constants.TitleBarHeight),
-			)
 
 			return m, tea.Batch(func() tea.Msg {
 				return content
 			})
+		case key.Matches(msg, DefaultKeymap.ShowFullHelp):
+			m.help.ShowAll = !m.help.ShowAll
 		}
 	}
 
@@ -183,14 +228,6 @@ func (m *RootModel) computeWindowSize(msg tea.WindowSizeMsg) {
 	m.WindowSize = tea.WindowSizeMsg{Height: usableHeight, Width: usableWidth}
 
 	content, devHeight := computeLayout(m.WindowSize, m.showDevConsole)
-	slog.Info("Content window resize... computeWindowSize",
-		slog.Int("Rootwidth", m.WindowSize.Width),
-		slog.Int("Rootheight", m.WindowSize.Height),
-		slog.Int("width", content.Width),
-		slog.Int("height", content.Height),
-		slog.Int("devHeight", devHeight),
-		slog.Int("TitleBarHeight", constants.TitleBarHeight),
-	)
 
 	m.ContentWindowSize = content
 	m.devConsoleHeight = devHeight
@@ -296,7 +333,7 @@ func computeLayout(
 
 	content := common.ContentWindowSizeMsg{
 		Width:  usableWidth,
-		Height: usableHeight - devHeight - constants.TitleBarHeight,
+		Height: usableHeight - devHeight - TitleBarHeight - minHelpBarHeight,
 	}
 
 	return content, devHeight
