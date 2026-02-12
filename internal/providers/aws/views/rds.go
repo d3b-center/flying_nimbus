@@ -49,7 +49,6 @@ type RdsViewModel struct {
 
 func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 	return m.inputRoutingStrategy
-
 }
 
 func (m RdsViewModel) Title() string {
@@ -122,7 +121,7 @@ func (m RdsViewModel) View() string {
 
 	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
 	left := instancesListStyle.MaxHeight(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.MaxHeight(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
+	right := instanceDetailStyle.MaxHeight(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
