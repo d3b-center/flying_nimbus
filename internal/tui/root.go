@@ -100,7 +100,7 @@ func renderTitleBar(m tea.Model, width int) string {
 	right := lipgloss.NewStyle().
 		Render("prod / us-east-1")
 
-	titleBar := lipgloss.JoinHorizontal(lipgloss.Left, left, lipgloss.NewStyle().Width(max(0, width-lipgloss.Width(left)-lipgloss.Width(right)-4)).Render(""),
+	titleBar := lipgloss.JoinHorizontal(lipgloss.Top, left, lipgloss.NewStyle().Width(max(0, width-lipgloss.Width(left)-lipgloss.Width(right)-4)).Render(""),
 		right,
 	)
 
@@ -162,70 +162,113 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	current := m.stack[len(m.stack)-1]
 
 	switch msg := msg.(type) {
-
 	case tea.WindowSizeMsg:
-		m.computeWindowSize(msg)
-		return m, tea.Batch(func() tea.Msg {
-			return m.ContentWindowSize
-		})
-
+		return m.handleWindowSize(msg)
 	case common.NavigateMsg:
-		m.stack = append(m.stack, msg.Model)
-		m.logNavigation("push", msg.Model)
-		return m, tea.Batch(msg.Model.Init())
-
+		return m.handleNavigation(msg)
 	case common.BackMsg:
-		if len(m.stack) > 1 {
-			m.logNavigation("pop", m.stack[len(m.stack)-1])
-			m.stack = m.stack[:len(m.stack)-1]
-		}
-		return m, nil
+		return m.handleBack()
 	case runtimeStatsMsg:
-		m.logRuntimeStats()
-		return m, runtimeStatsCmd()
+		return m.handleRuntimeStats()
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, DefaultKeymap.ShowFullHelp):
-			m.help.ShowAll = !m.help.ShowAll
-			return m, nil
+		return m.handleKeyMsg(msg, current)
+	}
 
-		case key.Matches(msg, DefaultKeymap.Quit):
+	// Delegate to current model
+	return m.delegateToCurrentModel(msg, current)
+}
+
+func (m RootModel) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	m.computeWindowSize(msg)
+	return m, tea.Batch(func() tea.Msg {
+		return m.ContentWindowSize
+	})
+}
+
+func (m RootModel) handleNavigation(msg common.NavigateMsg) (tea.Model, tea.Cmd) {
+	m.stack = append(m.stack, msg.Model)
+	m.logNavigation("push", msg.Model)
+	return m, tea.Batch(msg.Model.Init())
+}
+
+func (m RootModel) handleBack() (tea.Model, tea.Cmd) {
+	if len(m.stack) > 1 {
+		m.logNavigation("pop", m.stack[len(m.stack)-1])
+		m.stack = m.stack[:len(m.stack)-1]
+	}
+	return m, nil
+}
+
+func (m RootModel) handleRuntimeStats() (tea.Model, tea.Cmd) {
+	m.logRuntimeStats()
+	return m, runtimeStatsCmd()
+}
+
+func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, tea.Cmd) {
+	// Global help toggle - always handle this first
+	if key.Matches(msg, DefaultKeymap.ShowFullHelp) {
+		m.help.ShowAll = !m.help.ShowAll
+		return m, nil
+	}
+
+	// When full help is shown, only allow toggling help off and quit
+	if m.help.ShowAll {
+		if key.Matches(msg, DefaultKeymap.Quit) {
 			return m, tea.Quit
-
 		}
+		// Block all other input when help is shown
+		return m, nil
+	}
 
-		strategy := common.RouteGlobalFirst
-		if nimbus, ok := current.(common.NimbusModel); ok {
-			strategy = nimbus.InputRoutingStrategy()
-		}
+	// Handle quit
+	if key.Matches(msg, DefaultKeymap.Quit) {
+		return m, tea.Quit
+	}
 
-		if strategy == common.RouteGlobalFirst {
-			switch {
-			case key.Matches(msg, DefaultKeymap.Back):
-				return m, tea.Batch(func() tea.Msg {
-					return common.BackMsg{}
-				})
-			case key.Matches(msg, DefaultKeymap.ToggleDevConsole):
-				m.showDevConsole = !m.showDevConsole
+	// Get routing strategy from current model
+	strategy := m.getInputRoutingStrategy(current)
 
-				content, devHeight := computeLayout(
-					tea.WindowSizeMsg(m.WindowSize),
-					m.showDevConsole,
-				)
-
-				m.devConsoleHeight = devHeight
-				m.ContentWindowSize = content
-
-				return m, tea.Batch(func() tea.Msg {
-					return content
-				})
-			}
+	// Handle global keys if routing strategy is RouteGlobalFirst
+	if strategy == common.RouteGlobalFirst {
+		if handled, model, cmd := m.handleGlobalKeys(msg); handled {
+			return model, cmd
 		}
 	}
 
-	// delegate everything else
-	delegateMsg := msg
-	next, cmd := current.Update(delegateMsg)
+	// Delegate to current model
+	return m.delegateToCurrentModel(msg, current)
+}
+
+func (m RootModel) getInputRoutingStrategy(current tea.Model) common.InputRoutingStrategy {
+	if nimbus, ok := current.(common.NimbusModel); ok {
+		return nimbus.InputRoutingStrategy()
+	}
+	return common.RouteGlobalFirst
+}
+
+func (m RootModel) handleGlobalKeys(msg tea.KeyMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
+	switch {
+	case key.Matches(msg, DefaultKeymap.Back):
+		return true, m, tea.Batch(func() tea.Msg {
+			return common.BackMsg{}
+		})
+	case key.Matches(msg, DefaultKeymap.ToggleDevConsole):
+		m.showDevConsole = !m.showDevConsole
+		content, devHeight := computeLayout(
+			tea.WindowSizeMsg(m.WindowSize),
+			m.showDevConsole,
+		)
+		m.devConsoleHeight = devHeight
+		m.ContentWindowSize = content
+		return true, m, tea.Batch(func() tea.Msg {
+			return content
+		})
+	}
+	return false, m, nil
+}
+
+func (m RootModel) delegateToCurrentModel(msg tea.Msg, current tea.Model) (tea.Model, tea.Cmd) {
+	next, cmd := current.Update(msg)
 	m.stack[len(m.stack)-1] = next
 	return m, tea.Batch(cmd)
 }
@@ -245,7 +288,6 @@ func (m *RootModel) computeWindowSize(msg tea.WindowSizeMsg) {
 
 	m.ContentWindowSize = content
 	m.devConsoleHeight = devHeight
-
 }
 
 type runtimeStatsMsg struct{}
