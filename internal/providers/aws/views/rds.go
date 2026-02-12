@@ -16,7 +16,23 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const instanceListWidthRatio = 0.25
+var (
+	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
+	instancesListStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	instanceDetailStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+)
+
+const (
+	BorderHeight           = 2 // top + bottom
+	BorderWidth            = 4
+	instanceListWidthRatio = 0.25
+)
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
 type RdsViewModel struct {
@@ -105,8 +121,8 @@ func (m RdsViewModel) View() string {
 	}
 
 	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
-	left := instancesListStyle.Render(m.list.View())
-	right := instanceDetailStyle.Height(m.windowSize.Height).Width(m.windowSize.Width).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
+	left := instancesListStyle.MaxHeight(m.windowSize.Height).Render(m.list.View())
+	right := instanceDetailStyle.MaxHeight(m.windowSize.Height).Render(generateInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
@@ -147,10 +163,13 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	m.instanceListWidth = int(float64(msg.Width) * instanceListWidthRatio)
-	m.detailsWidth = msg.Width - m.instanceListWidth
+	usableHeight := m.windowSize.Height - BorderHeight
+	usableWidth := m.windowSize.Width - BorderWidth
 
-	m.list.SetSize(m.instanceListWidth, msg.Height)
+	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
+	m.detailsWidth = usableWidth - m.instanceListWidth
+
+	m.list.SetSize(m.instanceListWidth, usableHeight)
 }
 
 // dbInstancesToItems converts a slice of RDS instances to list.Items.
