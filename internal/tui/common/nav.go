@@ -2,13 +2,11 @@ package common
 
 import (
 	"flying_nimbus/internal/app"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // NavigateMsg tells the RootModel to push a new screen onto the stack.
 type NavigateMsg struct {
-	Model tea.Model
+	Model NimbusModel
 }
 
 // BackMsg tells the RootModel to pop the current screen.
@@ -22,10 +20,10 @@ type ContentWindowSizeMsg struct {
 type NavItem struct {
 	title string
 	desc  string
-	Model func(app *app.App) tea.Model
+	Model func(app *app.App, currentWindowSize ContentWindowSizeMsg) NimbusModel
 }
 
-func NewNavItem(title string, desc string, model func(*app.App) tea.Model) NavItem {
+func NewNavItem(title string, desc string, model func(*app.App, ContentWindowSizeMsg) NimbusModel) NavItem {
 	return NavItem{
 		title: title,
 		desc:  desc,

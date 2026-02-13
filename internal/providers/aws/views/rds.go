@@ -3,30 +3,60 @@ package views
 import (
 	"context"
 	"flying_nimbus/internal/app"
-	"flying_nimbus/internal/providers/aws/backend"
+	aws "flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-const instanceListWidthRatio = 0.25
+var (
+	spinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
+	instancesListStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	instanceDetailStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+)
+
+const (
+	BorderHeight           = 2 // top + bottom
+	BorderWidth            = 4
+	instanceListWidthRatio = 0.25
+)
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
 type RdsViewModel struct {
-	app               *app.App
-	list              list.Model
-	loader            spinner.Model
-	isLoading         bool
-	windowSize        common.ContentWindowSizeMsg
-	instanceListWidth int
-	detailsWidth      int
-	sgs               map[string]*aws.SecurityGroup
+	app                  *app.App
+	list                 list.Model
+	loader               spinner.Model
+	isLoading            bool
+	windowSize           common.ContentWindowSizeMsg
+	instanceListWidth    int
+	detailsWidth         int
+	sgs                  map[string]*aws.SecurityGroup
+	inputRoutingStrategy common.InputRoutingStrategy
+}
+
+func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return m.inputRoutingStrategy
+}
+
+func (m RdsViewModel) Title() string {
+	return "RDS Management"
+}
+
+func (m RdsViewModel) Commands() common.Commands {
+	return make([]key.Binding, 0)
 }
 
 // Messages returned from async commands.
@@ -35,31 +65,27 @@ type (
 	securityGroupsLoadedMsg map[string]*aws.SecurityGroup
 )
 
-func InitRdsViewModel(appService *app.App) RdsViewModel {
+func InitRdsViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) RdsViewModel {
 	items := []list.Item{}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
 	l.Title = "Instances"
 	l.SetShowTitle(true)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
-
-	windowSize := common.ContentWindowSizeMsg{
-		Height: constants.WindowSize.Height,
-		Width:  constants.WindowSize.Width,
-	}
 
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Dot
 
 	m := RdsViewModel{
-		app:        appService,
-		loader:     loader,
-		list:       l,
-		isLoading:  true,
-		windowSize: windowSize,
+		app:                  appService,
+		loader:               loader,
+		list:                 l,
+		isLoading:            true,
+		inputRoutingStrategy: common.RouteGlobalFirst,
 	}
+	slog.Debug(fmt.Sprintf("Window Size Init %v", windowSize))
 	m.updateLayout(windowSize)
 
 	return m
@@ -93,8 +119,9 @@ func (m RdsViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	left := common.InstancesListStyle.Width(m.instanceListWidth).Height(m.windowSize.Height).Render(m.list.View())
-	right := common.InstanceDetailStyle.Width(m.detailsWidth).Height(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
+	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
+	left := instancesListStyle.MaxHeight(m.windowSize.Height).Render(m.list.View())
+	right := instanceDetailStyle.MaxHeight(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
@@ -121,6 +148,13 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		m.list, cmd = m.list.Update(msg)
 	}
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	} else {
+		m.inputRoutingStrategy = common.RouteGlobalFirst
+	}
 	return m, cmd
 }
 
@@ -128,10 +162,13 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	m.instanceListWidth = int(float64(msg.Width) * instanceListWidthRatio)
-	m.detailsWidth = msg.Width - m.instanceListWidth
+	usableHeight := m.windowSize.Height - BorderHeight
+	usableWidth := m.windowSize.Width - BorderWidth
 
-	m.list.SetSize(m.instanceListWidth, msg.Height)
+	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
+	m.detailsWidth = usableWidth - m.instanceListWidth
+
+	m.list.SetSize(m.instanceListWidth, usableHeight)
 }
 
 // dbInstancesToItems converts a slice of RDS instances to list.Items.

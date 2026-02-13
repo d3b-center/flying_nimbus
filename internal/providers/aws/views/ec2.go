@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -20,18 +21,19 @@ const ec2InstanceListWidthRatio = 0.25
 
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
-	app               *app.App
-	list              list.Model
-	loader            spinner.Model
-	isLoading         bool
-	instanceDetail    string
-	detailsFocused    bool
-	detailViewport    viewport.Model
-	windowSize        common.ContentWindowSizeMsg
-	ready             bool
-	instanceListWidth int
-	detailsWidth      int
-	contentHeight     int
+	app                  *app.App
+	list                 list.Model
+	loader               spinner.Model
+	isLoading            bool
+	instanceDetail       string
+	detailsFocused       bool
+	detailViewport       viewport.Model
+	windowSize           common.ContentWindowSizeMsg
+	ready                bool
+	instanceListWidth    int
+	detailsWidth         int
+	contentHeight        int
+	inputRoutingStrategy common.InputRoutingStrategy
 }
 
 type (
@@ -44,20 +46,15 @@ var (
 )
 
 // Creates a new EC2 view model
-func InitEc2ViewModel(appService *app.App) Ec2ViewModel {
+func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) Ec2ViewModel {
 	slog.Debug("Initialize custom Ec2 view model")
 	items := []list.Item{}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
 	l.Title = "Instances"
 	l.SetShowTitle(true)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
-
-	windowSize := common.ContentWindowSizeMsg{
-		Height: constants.WindowSize.Height,
-		Width:  constants.WindowSize.Width,
-	}
 
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
@@ -87,6 +84,18 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
+func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return m.inputRoutingStrategy
+}
+
+func (m Ec2ViewModel) Commands() common.Commands {
+	return make([]key.Binding, 0)
+}
+
+func (m Ec2ViewModel) Title() string {
+	return "EC2 Management"
+}
+
 // Init initializes the EC2 view model.
 func (m Ec2ViewModel) Init() tea.Cmd {
 	slog.Debug("Initialize Ec2 BubbleTea Model")
@@ -99,20 +108,11 @@ func (m Ec2ViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	w, h := constants.DocStyle.GetFrameSize()
-	contentWidth := constants.WindowSize.Width - w
-	contentHeight := constants.WindowSize.Height - h
-
-	instanceListWidth := contentWidth / 3
-	detailsWidth := contentWidth - instanceListWidth
-
 	listStyle := common.InstancesListStyle.
-		Width(instanceListWidth).
-		Height(contentHeight)
+		MaxHeight(m.contentHeight)
 
 	detailStyle := common.InstanceDetailStyle.
-		Width(detailsWidth).
-		Height(contentHeight)
+		MaxHeight(m.contentHeight)
 
 	if m.detailsFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
@@ -163,6 +163,12 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	} else {
+		m.inputRoutingStrategy = common.RouteGlobalFirst
+	}
 	return m, cmd
 }
 
@@ -239,9 +245,13 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	m.instanceListWidth = int(float64(msg.Width) * ec2InstanceListWidthRatio)
-	m.detailsWidth = msg.Width - m.instanceListWidth
-	m.contentHeight = msg.Height
+	usableWidth := msg.Width - BorderWidth
+	usableHeight := msg.Height - BorderHeight
+
+	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
+	m.detailsWidth = usableWidth - m.instanceListWidth
+
+	m.contentHeight = usableHeight
 
 	if !m.ready {
 		m.detailViewport = viewport.New(m.instanceListWidth, m.contentHeight)
@@ -252,7 +262,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 		m.resizeViewport(m.detailViewport.Width, m.detailViewport.Height)
 	}
 
-	m.list.SetSize(m.instanceListWidth, m.contentHeight)
+	m.list.SetSize(m.instanceListWidth, usableHeight)
 	m.detailViewport.SetContent(m.instanceDetail)
 }
 
