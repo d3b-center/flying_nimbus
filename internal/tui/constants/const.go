@@ -6,7 +6,7 @@ import (
 )
 
 // WindowSize store the size of the terminal window
-var DocStyle = lipgloss.NewStyle().Margin(2, 2)
+var DocStyle = lipgloss.NewStyle().Margin(1, 1)
 
 type keymap struct {
 	Enter      key.Binding

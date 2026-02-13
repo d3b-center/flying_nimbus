@@ -73,7 +73,6 @@ func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSiz
 			"EC2",
 			"Manage EC2 Resources",
 			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
-				// NewAWSProviderModel Please Remove (dummy model)
 				return views.InitEc2ViewModel(appService, windowSize)
 			},
 		),

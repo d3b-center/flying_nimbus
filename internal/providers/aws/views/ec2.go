@@ -50,7 +50,7 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	slog.Debug("Initialize custom Ec2 view model")
 	items := []list.Item{}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
 	l.Title = "Instances"
 	l.SetShowTitle(true)
 	l.SetShowStatusBar(false)
@@ -109,12 +109,10 @@ func (m Ec2ViewModel) View() string {
 	}
 
 	listStyle := common.InstancesListStyle.
-		Width(m.instanceListWidth).
-		Height(m.contentHeight)
+		MaxHeight(m.contentHeight)
 
 	detailStyle := common.InstanceDetailStyle.
-		Width(m.detailsWidth).
-		Height(m.contentHeight)
+		MaxHeight(m.contentHeight)
 
 	if m.detailsFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
@@ -247,9 +245,13 @@ func (m *Ec2ViewModel) resizeViewport(width int, height int) {
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	m.instanceListWidth = int(float64(msg.Width) * ec2InstanceListWidthRatio)
-	m.detailsWidth = msg.Width - m.instanceListWidth
-	m.contentHeight = msg.Height
+	usableWidth := msg.Width - BorderWidth
+	usableHeight := msg.Height - BorderHeight
+
+	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
+	m.detailsWidth = usableWidth - m.instanceListWidth
+
+	m.contentHeight = usableHeight
 
 	if !m.ready {
 		m.detailViewport = viewport.New(m.instanceListWidth, m.contentHeight)
@@ -260,7 +262,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 		m.resizeViewport(m.detailViewport.Width, m.detailViewport.Height)
 	}
 
-	m.list.SetSize(m.instanceListWidth, m.contentHeight)
+	m.list.SetSize(m.instanceListWidth, usableHeight)
 	m.detailViewport.SetContent(m.instanceDetail)
 }
 
