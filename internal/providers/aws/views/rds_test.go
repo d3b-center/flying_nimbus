@@ -38,13 +38,13 @@ func TestUpdateLayout(t *testing.T) {
 
 	model.updateLayout(msg)
 
-	expectedListWidth := int(float64(100) * instanceListWidthRatio)
+	expectedListWidth := int(float64(100-BorderWidth) * instanceListWidthRatio)
 
 	if model.instanceListWidth != expectedListWidth && model.list.Width() != expectedListWidth {
 		t.Errorf("expected %d, got %d", expectedListWidth, model.instanceListWidth)
 	}
 
-	if model.detailsWidth != 100-expectedListWidth {
+	if model.detailsWidth != (100-BorderWidth)-expectedListWidth {
 		t.Errorf("details width mismatch")
 	}
 }
