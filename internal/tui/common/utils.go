@@ -1,0 +1,96 @@
+// Package common contains reusable TUI rendering helpers and styles.
+package common
+
+import (
+	"fmt"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+const DefaultLabelWidth = 18
+
+var (
+	DefaultLabelStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#EE6FF8"))
+	DefaultValueStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("255"))
+	SpinnerStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Align(lipgloss.Center)
+	InstancesListStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	InstanceDetailStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(lipgloss.Color("240")).
+				Padding(0, 1)
+	HeaderStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("62")).
+			Foreground(lipgloss.Color("230")).
+			Padding(0, 1)
+	SectionHeaderStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("62")).
+				PaddingBottom(1)
+)
+
+// KVOption configures the behavior of the KV renderer.
+type KVOption func(*kvConfig)
+
+// kvConfig holds configuration for rendering a key–value row.
+type kvConfig struct {
+	labelStyle lipgloss.Style
+	valueStyle lipgloss.Style
+	labelWidth int
+}
+
+// KV renders a single key–value row using a fixed-width label column.
+//
+// By default, KV uses DefaultLabelStyle, DefaultValueStyle, and
+// DefaultLabelWidth. These defaults can be overridden using KVOption
+// functions such as WithLabelStyle, WithValueStyle, or WithLabelWidth.
+//
+// Example:
+//
+//	common.KV("Engine", "postgres")
+//	common.KV("Status", "available", common.WithValueStyle(statusStyle))
+func KV(label, value string, opts ...KVOption) string {
+	cfg := kvConfig{
+		labelStyle: DefaultLabelStyle,
+		valueStyle: DefaultValueStyle,
+		labelWidth: DefaultLabelWidth,
+	}
+
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	return fmt.Sprintf(
+		"%s %s",
+		cfg.labelStyle.Render(fmt.Sprintf("%-*s", cfg.labelWidth, label+":")),
+		cfg.valueStyle.Render(value),
+	)
+}
+
+// WithLabelStyle overrides the style used to render the label portion
+// of a key–value row.
+func WithLabelStyle(s lipgloss.Style) KVOption {
+	return func(c *kvConfig) {
+		c.labelStyle = s
+	}
+}
+
+// WithValueStyle overrides the style used to render the value portion
+// of a key–value row.
+func WithValueStyle(s lipgloss.Style) KVOption {
+	return func(c *kvConfig) {
+		c.valueStyle = s
+	}
+}
+
+// WithLabelWidth overrides the fixed width used for the label column.
+// This can be useful when rendering in narrow or wide panes.
+func WithLabelWidth(w int) KVOption {
+	return func(c *kvConfig) {
+		c.labelWidth = w
+	}
+}

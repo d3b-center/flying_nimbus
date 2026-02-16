@@ -5,40 +5,56 @@ import (
 	"flying_nimbus/internal/providers/aws"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"github.com/charmbracelet/bubbles/key"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ProvidersModel struct {
-	app  *app.App
-	list list.Model
+	app    *app.App
+	list   list.Model
+	window common.ContentWindowSizeMsg
 }
 
-func NewProvidersModel(application *app.App) ProvidersModel {
+func (m ProvidersModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return common.RouteGlobalFirst
+}
+
+func (m ProvidersModel) Title() string {
+	return "Providers"
+}
+
+func (m ProvidersModel) Commands() common.Commands {
+	return make([]key.Binding, 0)
+}
+
+func NewProvidersModel(application *app.App, contentWindowSize common.ContentWindowSizeMsg) ProvidersModel {
 	items := []list.Item{
 		common.NewNavItem(
 			"aws",
 			"Amazon Web Services",
-			func(application *app.App) tea.Model {
-				return aws.NewAWSProviderModel(application)
+			func(application *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return aws.NewAWSProviderModel(application, windowSize)
 			},
 		),
 		common.NewNavItem(
 			"azure",
 			"Azure (not good)",
-			func(a *app.App) tea.Model {
-				return aws.NewAWSProviderModel(a)
+			func(a *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return aws.NewAWSProviderModel(a, windowSize)
 			},
 		),
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Select Provider!!"
+	l := list.New(items, list.NewDefaultDelegate(), contentWindowSize.Width, contentWindowSize.Height)
+	l.Title = "Select Provider"
+	l.SetShowHelp(false)
 
 	return ProvidersModel{
-		app:  application,
-		list: l,
+		app:    application,
+		list:   l,
+		window: contentWindowSize,
 	}
 }
 
@@ -47,22 +63,22 @@ func (m ProvidersModel) Init() tea.Cmd {
 }
 
 func (m ProvidersModel) View() string {
-	return constants.DocStyle.Render(m.list.View() + "\n")
+	m.list.SetSize(m.window.Width, m.window.Height)
+	return m.list.View() + "\n"
 }
 
 func (m ProvidersModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		constants.WindowSize = msg
-		top, right, bottom, left := constants.DocStyle.GetMargin()
-		m.list.SetSize(msg.Width-left-right, msg.Height-top-bottom-1)
+	case common.ContentWindowSizeMsg:
+		m.window = msg
+		m.list.SetSize(msg.Width, msg.Height)
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
+		switch {
+		case key.Matches(msg, constants.Keymap.Enter):
 			item := m.list.SelectedItem().(common.NavItem)
 			return m, func() tea.Msg {
-				return NavigateMsg{
-					Model: item.Model(m.app),
+				return common.NavigateMsg{
+					Model: item.Model(m.app, m.window),
 				}
 			}
 		}
