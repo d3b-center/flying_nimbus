@@ -78,6 +78,7 @@ func (m nimbusKeyMap) FullHelp() [][]key.Binding {
 		m.Global.Back,
 		m.Global.ToggleDevConsole,
 	}}
+	kb = append(kb, m.Dynamic)
 
 	return kb
 }

@@ -26,6 +26,10 @@ var (
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(0, 1)
+	forceRefresh = key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "refresh RDSs"),
+	)
 )
 
 const (
@@ -56,7 +60,7 @@ func (m RdsViewModel) Title() string {
 }
 
 func (m RdsViewModel) Commands() common.Commands {
-	return make([]key.Binding, 0)
+	return []key.Binding{forceRefresh}
 }
 
 // Messages returned from async commands.
@@ -127,7 +131,7 @@ func (m RdsViewModel) View() string {
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
 		m.windowSize = msg
@@ -136,17 +140,33 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case rdsInstancesLoadedMsg:
 		m.list.SetItems(msg)
 		slog.Debug(fmt.Sprintf("📥 Rcv'd Rds Instances... # of Rds' %d", len(m.list.Items())))
-		cmd = fetchSecurityGroupsCmd(m.app.Context, m.app.AWS.Sg, gatherSecurityGroupIds(msg))
+		cmd := fetchSecurityGroupsCmd(m.app.Context, m.app.AWS.Sg, gatherSecurityGroupIds(msg))
+		cmds = append(cmds, cmd)
 
 	case securityGroupsLoadedMsg:
 		slog.Debug(fmt.Sprintf("📥 Rcv'd SG Details' %d", len(msg)))
 		m.isLoading = false
 		m.sgs = msg
 
+	case tea.KeyMsg:
+		newList, cmd := m.list.Update(msg)
+		m.list = newList
+		cmds = append(cmds, cmd)
+		if key.Matches(msg, forceRefresh) {
+			m.isLoading = true
+			cmd = fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
+			cmds = append(cmds, cmd)
+		}
+
 	case spinner.TickMsg:
-		m.loader, cmd = m.loader.Update(msg)
+		newLoader, cmd := m.loader.Update(msg)
+		m.loader = newLoader
+		cmds = append(cmds, cmd)
 	default:
-		m.list, cmd = m.list.Update(msg)
+		newList, cmd := m.list.Update(msg)
+		m.list = newList
+		cmds = append(cmds, cmd)
+
 	}
 
 	filterState := m.list.FilterState()
@@ -155,7 +175,7 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst
 	}
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 // updateLayout recalculates pane widths based on the current window size.
