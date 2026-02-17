@@ -6,6 +6,28 @@ import (
 	"flying_nimbus/internal/tui/common"
 	"fmt"
 	"log/slog"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
+)
+
+var (
+	focusedColor   = lipgloss.Color("62")
+	unfocusedColor = lipgloss.Color("240")
+	forceRefresh   = key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "refresh RDSs"),
+	)
+	toggleFocus = key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "toggle focus"),
+	)
+)
+
+const (
+	BorderHeight           = 2 // top + bottom
+	BorderWidth            = 4
+	instanceListWidthRatio = 0.25
 )
 
 // GenerateTagRows takes tags and formats them for rendering

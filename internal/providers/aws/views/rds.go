@@ -29,20 +29,6 @@ var (
 				Border(lipgloss.NormalBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(0, 1)
-	forceRefresh = key.NewBinding(
-		key.WithKeys("r"),
-		key.WithHelp("r", "refresh RDSs"),
-	)
-	toggleFocus = key.NewBinding(
-		key.WithKeys("tab"),
-		key.WithHelp("tab", "toggle focus"),
-	)
-)
-
-const (
-	BorderHeight           = 2 // top + bottom
-	BorderWidth            = 4
-	instanceListWidthRatio = 0.25
 )
 
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
@@ -215,6 +201,7 @@ func (m *RdsViewModel) updateInstanceDetails() {
 		return
 	}
 	m.viewport.SetContent(generateRdsInstanceDetail(m.detailsWidth, m.list.SelectedItem(), m.sgs))
+	m.viewport.GotoTop()
 }
 
 func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
