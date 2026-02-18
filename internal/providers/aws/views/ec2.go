@@ -29,7 +29,6 @@ type Ec2ViewModel struct {
 	detailsFocused       bool
 	detailViewport       viewport.Model
 	windowSize           common.ContentWindowSizeMsg
-	ready                bool
 	instanceListWidth    int
 	detailsWidth         int
 	contentHeight        int
@@ -38,11 +37,6 @@ type Ec2ViewModel struct {
 
 type (
 	ec2InstancesLoadedMsg []list.Item
-)
-
-var (
-	focusedColor   = lipgloss.Color("62")
-	unfocusedColor = lipgloss.Color("240")
 )
 
 // Creates a new EC2 view model
@@ -60,7 +54,7 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
-	vp := viewport.New(0, 0)
+	vp := viewport.New(windowSize.Width, windowSize.Height)
 
 	m := Ec2ViewModel{
 		app:            appService,
@@ -89,7 +83,7 @@ func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return make([]key.Binding, 0)
+	return []key.Binding{toggleFocus}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -109,10 +103,10 @@ func (m Ec2ViewModel) View() string {
 	}
 
 	listStyle := common.InstancesListStyle.
-		MaxHeight(m.contentHeight)
+		MaxHeight(m.windowSize.Height)
 
 	detailStyle := common.InstanceDetailStyle.
-		MaxHeight(m.contentHeight)
+		MaxHeight(m.windowSize.Height)
 
 	if m.detailsFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
@@ -122,17 +116,18 @@ func (m Ec2ViewModel) View() string {
 		detailStyle = detailStyle.BorderForeground(unfocusedColor)
 	}
 
+	m.detailViewport.Style = detailStyle
+
 	left := listStyle.Render(m.list.View())
-	right := detailStyle.Render(m.detailViewport.View())
+	right := m.detailViewport.View()
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 // Update handles messages and updates the model state.
 func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	prevIndex := m.list.Index()
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
@@ -150,12 +145,22 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		m.loader, cmd = m.loader.Update(msg)
-		return m, cmd
+		newLoader, cmd := m.loader.Update(msg)
+		m.loader = newLoader
+		cmds = append(cmds, cmd)
+
 	case tea.KeyMsg:
-		cmd = m.handleKeypress(msg)
+		if key.Matches(msg, forceRefresh) {
+			m.isLoading = true
+			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
+			cmds = append(cmds, cmd)
+		}
+		cmd := m.handleKeypress(msg)
+		cmds = append(cmds, cmd)
 	default:
-		m.list, cmd = m.list.Update(msg)
+		newList, cmd := m.list.Update(msg)
+		m.list = newList
+		cmds = append(cmds, cmd)
 	}
 
 	if m.list.Index() != prevIndex {
@@ -169,7 +174,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst
 	}
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 // ec2InstancesToItems converts EC2 instances to list items.
@@ -230,17 +235,6 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// resizeViewport updates the viewport dimensions.
-func (m *Ec2ViewModel) resizeViewport(width int, height int) {
-	if !m.ready {
-		m.detailViewport = viewport.New(width, height)
-		m.ready = true
-	} else {
-		m.detailViewport.Width = width
-		m.detailViewport.Height = height
-	}
-}
-
 // updateLayout recalculates and applies layout dimensions.
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
@@ -253,17 +247,10 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 
 	m.contentHeight = usableHeight
 
-	if !m.ready {
-		m.detailViewport = viewport.New(m.instanceListWidth, m.contentHeight)
-		m.ready = true
-	} else {
-		m.detailViewport.Width = m.detailsWidth
-		m.detailViewport.Height = m.contentHeight
-		m.resizeViewport(m.detailViewport.Width, m.detailViewport.Height)
-	}
+	m.detailViewport.Width = m.detailsWidth
+	m.detailViewport.Height = msg.Height
 
 	m.list.SetSize(m.instanceListWidth, usableHeight)
-	m.detailViewport.SetContent(m.instanceDetail)
 }
 
 // updateInstanceDetails regenerates and displays instance details.
@@ -276,25 +263,15 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
-	switch msg.String() {
-	case "right":
-		slog.Debug("Focus on details view")
-		m.detailsFocused = true
-	case "left":
-		slog.Debug("Focus on instances list")
-		m.detailsFocused = false
-	case "down":
-		if m.detailsFocused {
-			m.detailViewport.PageDown()
-		} else {
-			m.list, cmd = m.list.Update(msg)
-		}
-	case "up":
-		if m.detailsFocused {
-			m.detailViewport.PageUp()
-		} else {
-			m.list, cmd = m.list.Update(msg)
-		}
+	if key.Matches(msg, toggleFocus) {
+		m.detailsFocused = !m.detailsFocused
+		return nil
+	}
+
+	if m.detailsFocused {
+		m.detailViewport, cmd = m.detailViewport.Update(msg)
+	} else {
+		m.list, cmd = m.list.Update(msg)
 	}
 	return cmd
 }
