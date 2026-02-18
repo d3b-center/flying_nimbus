@@ -70,12 +70,14 @@ func TestEc2UpdateLayout(t *testing.T) {
 }
 
 func TestUpdate_FocusSwitching(t *testing.T) {
+	items := []list.Item{}
 	model := Ec2ViewModel{
 		detailsFocused: false,
+		list:           list.New(items, list.NewDefaultDelegate(), 0, 0),
 	}
 
 	// Focus right
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m := updated.(Ec2ViewModel)
 
 	if !m.detailsFocused {
@@ -83,7 +85,8 @@ func TestUpdate_FocusSwitching(t *testing.T) {
 	}
 
 	// Focus left
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
 	m = updated.(Ec2ViewModel)
 
 	if m.detailsFocused {
