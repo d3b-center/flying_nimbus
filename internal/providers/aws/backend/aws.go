@@ -10,10 +10,11 @@ import (
 )
 
 type AwsService struct {
-	config *aws.Config
-	Ec2    *Ec2Service
-	Rds    *RdsService
-	Sg     *SgService
+	config         *aws.Config
+	Ec2            *Ec2Service
+	Rds            *RdsService
+	Sg             *SgService
+	ServiceCatalog *ServiceCatalogService
 }
 
 func InitAwsService(ctx context.Context) (*AwsService, error) {
@@ -28,14 +29,16 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	ec2 := InitEc2Service(cfg)
 
 	rds := InitRdsService(cfg)
+	serviceCatalog := InitServiceCatalogService(cfg)
 
 	sg := InitSgService(cfg)
 
 	return &AwsService{
-		config: &cfg,
-		Ec2:    ec2,
-		Rds:    rds,
-		Sg:     sg,
+		config:         &cfg,
+		Ec2:            ec2,
+		Rds:            rds,
+		Sg:             sg,
+		ServiceCatalog: serviceCatalog,
 	}, nil
 
 }
