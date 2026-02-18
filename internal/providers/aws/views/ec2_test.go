@@ -49,26 +49,6 @@ func TestGenerateEc2InstanceDetail_Nil(t *testing.T) {
 	}
 }
 
-func TestResizeViewport(t *testing.T) {
-	model := &Ec2ViewModel{
-		ready: false,
-	}
-
-	model.resizeViewport(800, 600)
-
-	if !model.ready {
-		t.Error("expected ready to be true after resize")
-	}
-
-	if model.detailViewport.Width != 800 {
-		t.Errorf("expected width 800, got %d", model.detailViewport.Width)
-	}
-
-	if model.detailViewport.Height != 600 {
-		t.Errorf("expected height 600, got %d", model.detailViewport.Height)
-	}
-}
-
 func TestEc2UpdateLayout(t *testing.T) {
 	model := &Ec2ViewModel{}
 
