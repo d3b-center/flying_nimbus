@@ -147,10 +147,11 @@ func (m S3BucketsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			cmd := listS3BucketsCmd(m.app.Context, m.app.AWS.S3)
 			cmds = append(cmds, cmd)
+		} else {
+			newList, cmd := m.list.Update(msg)
+			m.list = newList
+			cmds = append(cmds, cmd)
 		}
-		// looks like this also handles stuff with instance details
-		// cmd := m.handleKeypress(msg)
-		// cmds = append(cmds, cmd)
 
 	default:
 		newList, cmd := m.list.Update(msg)
