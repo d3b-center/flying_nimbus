@@ -1,0 +1,15 @@
+package aws
+
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+type S3Bucket struct {
+	Name string
+}
+
+type s3API interface {
+	ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFuncs ...func(*s3.Options))
+}
