@@ -34,6 +34,7 @@ type Ec2ViewModel struct {
 	detailsWidth         int
 	contentHeight        int
 	inputRoutingStrategy common.InputRoutingStrategy
+
 }
 
 type (
@@ -296,5 +297,12 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 			m.list, cmd = m.list.Update(msg)
 		}
 	}
+	case "enter":
+		m.openActionMenu
+
 	return cmd
+}
+
+func (m *Ec2ViewModel) openActionMenu() {
+	
 }
