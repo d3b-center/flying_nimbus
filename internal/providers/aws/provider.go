@@ -70,6 +70,13 @@ func (m AwsProviderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSizeMsg) AwsProviderModel {
 	items := []list.Item{
 		common.NewNavItem(
+			"S3",
+			"Browse S3 buckets and objects (files)",
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return views.InitS3ViewModel(appService, windowSize)
+			},
+		),
+		common.NewNavItem(
 			"EC2",
 			"Manage EC2 Resources",
 			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
