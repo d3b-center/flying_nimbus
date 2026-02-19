@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -26,10 +25,10 @@ type S3BucketsViewModel struct {
 	windowSize           common.ContentWindowSizeMsg
 	inputRoutingStrategy common.InputRoutingStrategy
 	// cargo cult from ec2 model, maybe use this for the objects in the bucket?
-	detailViewport   viewport.Model
+	// detailViewport   viewport.Model
 	bucketsListWidth int
-	detailsWidth     int
-	contentHeight    int
+	// detailsWidth     int
+	contentHeight int
 }
 
 type s3BucketsLoadedMsg []list.Item
@@ -48,15 +47,15 @@ func InitS3ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
-	vp := viewport.New(windowSize.Width, windowSize.Height)
+	// vp := viewport.New(windowSize.Width, windowSize.Height)
 
 	m := S3BucketsViewModel{
-		app:            appService,
-		list:           l,
-		loader:         loader,
-		isLoading:      true,
-		windowSize:     windowSize,
-		detailViewport: vp,
+		app:        appService,
+		list:       l,
+		loader:     loader,
+		isLoading:  true,
+		windowSize: windowSize,
+		// detailViewport: vp,
 	}
 	m.updateLayout(windowSize)
 
@@ -91,13 +90,14 @@ func (m *S3BucketsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - BorderWidth
 	usableHeight := msg.Height - BorderHeight
 
-	m.bucketsListWidth = int(float64(usableWidth) * s3BucketListWidthRatio)
-	m.detailsWidth = usableWidth - m.bucketsListWidth
+	// m.bucketsListWidth = int(float64(usableWidth) * s3BucketListWidthRatio)
+	m.bucketsListWidth = usableWidth
+	// m.detailsWidth = usableWidth - m.bucketsListWidth
 
 	m.contentHeight = usableHeight
 
-	m.detailViewport.Width = m.detailsWidth
-	m.detailViewport.Height = msg.Height
+	// m.detailViewport.Width = m.detailsWidth
+	// m.detailViewport.Height = msg.Height
 
 	m.list.SetSize(m.bucketsListWidth, usableHeight)
 }
