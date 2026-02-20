@@ -259,6 +259,10 @@ func (i regularFileListItem) Title() string {
 	return i.name
 }
 
+func (i regularFileListItem) Description() string {
+	return "(regular file)"
+}
+
 func (i regularFileListItem) FilterValue() string {
 	return i.name
 }
@@ -270,6 +274,10 @@ type subdirListItem struct {
 
 func (i subdirListItem) Title() string {
 	return i.name
+}
+
+func (i subdirListItem) Description() string {
+	return "(directory)"
 }
 
 func (i subdirListItem) FilterValue() string {
