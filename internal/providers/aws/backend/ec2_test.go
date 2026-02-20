@@ -146,14 +146,8 @@ func TestEc2Service_ListInstances_Success(t *testing.T) {
 	if len(inst.SecurityGroupIds) != 2 {
 		t.Errorf("expected 2 SGs, got %d", len(inst.SecurityGroupIds))
 	}
-	if len(inst.Volumes) != 1 {
-		t.Errorf("expected 1 volume, got %d", len(inst.Volumes))
-	}
-	if inst.Volumes[0].VolumeID != "vol-abc" {
-		t.Errorf("VolumeID = %q", inst.Volumes[0].VolumeID)
-	}
-	if inst.Volumes[0].SizeGb != 100 {
-		t.Errorf("Volume Size = %q", inst.Volumes[0].SizeGb)
+	if len(inst.VolumeIds) != 1 {
+		t.Errorf("expected 1 volume, got %d", len(inst.VolumeIds))
 	}
 	if len(inst.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d", len(inst.Tags))
