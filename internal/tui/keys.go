@@ -45,7 +45,7 @@ var DefaultKeymap = keymap{
 		key.WithKeys("q"),
 		key.WithHelp("q", "quit"),
 	),
-	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c")),
+	ForceQuit: constants.Keymap.ForceQuit,
 }
 
 type nimbusKeyMap struct {

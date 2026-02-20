@@ -46,6 +46,7 @@ type Ec2ViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	actionModel         ActionModel
 	isActionModalActive bool
+	returningFromSsm    bool
 }
 
 func ec2Actions() []ModalAction {
@@ -198,12 +199,13 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SsmSessionFinishedMsg:
 		m.isActionModalActive = false
+		m.returningFromSsm = true 
 		return m, tea.ClearScreen
 
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
 			m.isLoading = true
-			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
+			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 			cmds = append(cmds, cmd)
 		}
 		
@@ -311,6 +313,14 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
+	if m.returningFromSsm {
+		m.returningFromSsm = false
+		if key.Matches(msg, constants.Keymap.ForceQuit) {
+			slog.Debug("Captured extra ctl+c")
+			return nil  // swallow stale ctl+c from SSM session
+		}
+	}
+
 	if m.isActionModalActive {
 		m.actionModel, cmd = m.actionModel.Update(msg)
 		return cmd
