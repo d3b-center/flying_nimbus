@@ -15,8 +15,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const s3BucketListWidthRatio = 0.25
-
 type S3BucketsViewModel struct {
 	app                  *app.App
 	list                 list.Model
@@ -24,11 +22,8 @@ type S3BucketsViewModel struct {
 	isLoading            bool
 	windowSize           common.ContentWindowSizeMsg
 	inputRoutingStrategy common.InputRoutingStrategy
-	// cargo cult from ec2 model, maybe use this for the objects in the bucket?
-	// detailViewport   viewport.Model
-	bucketsListWidth int
-	// detailsWidth     int
-	contentHeight int
+	bucketsListWidth     int
+	contentHeight        int
 }
 
 type s3BucketsLoadedMsg []list.Item

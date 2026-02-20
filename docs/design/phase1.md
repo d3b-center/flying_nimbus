@@ -129,6 +129,21 @@ Creation of Dev Tunnel
 * Assume Default Port
 * Use Bastion Host
 
+#### S3
+
+List S3 buckets and their contents
+
+Navigate list of buckets
+
+ * Name of bucket
+
+Select a bucket, view its contents like a directory tree.
+S3 has "directory buckets", but our buckets are all of the ordinary "flat" variety.
+They may mimick a file tree by including slashes (`/`) in the object keys.
+
+ * Files (objects without `"/"`)
+ * Subdirectories (paths up to first `"/"`), select one to descend into all objects sharing that prefix
+
 #### Service Catalog
 
 List available products
