@@ -78,8 +78,8 @@ func (s S3Service) ListBuckets(ctx context.Context) ([]S3Bucket, error) {
 	return results, nil
 }
 
-func (s S3Service) ListBucketObjects(ctx context.Context, bucketName string) ([]S3Object, error) {
-	results := []S3Object{}
+func (s S3Service) ListBucketObjects(ctx context.Context, bucketName string) (*S3FileTree, error) {
+	objects := []S3Object{}
 	input := s3.ListObjectsV2Input{
 		Bucket: &bucketName,
 	}
@@ -92,10 +92,10 @@ func (s S3Service) ListBucketObjects(ctx context.Context, bucketName string) ([]
 			if obj.Key == nil {
 				return nil, fmt.Errorf("s3 object has no key?")
 			}
-			results = append(results, S3Object{Name: *obj.Key})
+			objects = append(objects, S3Object{Name: *obj.Key})
 		}
 	}
-	return results, nil
+	return buildFileTree(objects), nil
 }
 
 func stoppingOnDupToken(opt *s3.ListObjectsV2PaginatorOptions) {
