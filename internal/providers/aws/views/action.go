@@ -68,7 +68,12 @@ func NewActionModal(title string, actions []ModalAction) ActionModel {
 }
 
 func (m ActionModel) Commands() common.Commands {
-	return []key.Binding{leftKey, rightKey}
+	return []key.Binding{
+		leftKey,
+		rightKey,
+		constants.Keymap.Enter,
+		constants.Keymap.Back,
+	}
 }
 
 func (m ActionModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -77,7 +82,7 @@ func (m ActionModel) InputRoutingStrategy() common.InputRoutingStrategy {
 
 func (m ActionModel) Init() tea.Cmd {
 	slog.Debug("Initializing action modal")
-	return nil // Doesn't do anything on initialization
+	return nil //Do nothing
 }
 
 func (m ActionModel) Update(msg tea.Msg) (ActionModel, tea.Cmd) {
@@ -130,11 +135,11 @@ func (m *ActionModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 			return ModalSelectMsg{selected}
 		}
 	}
-	// if key.Matches(msg, tui.DefaultKeymap.Back) {
-	// 	cmd = func() tea.Msg {
-	// 		return ModalCancelMsg{}
-	// 	}
-	// }
+	if key.Matches(msg, constants.Keymap.Back) {
+		cmd = func() tea.Msg {
+			return ModalCancelMsg{}
+		}
+	}
 
 	return cmd
 }

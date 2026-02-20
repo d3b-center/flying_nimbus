@@ -28,6 +28,8 @@ const (
 	Ec2ActionStopInstance
 ) 
 
+type SsmSessionFinishedMsg struct{}
+
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
 	app                  *app.App
@@ -193,6 +195,9 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isActionModalActive = false
 		return m, nil
 
+	case SsmSessionFinishedMsg:
+		return m, tea.ClearScreen
+
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
 			m.isLoading = true
@@ -332,7 +337,9 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Ec2ViewModel) handleEc2Action(action ModalAction) tea.Cmd {
+	var cmd tea.Cmd
 	ec2Action := action.Action
+
 	switch ec2Action {
 	case Ec2ActionSSMShell:
 		slog.Info("Opening SSM Shell")
@@ -340,10 +347,12 @@ func (m *Ec2ViewModel) handleEc2Action(action ModalAction) tea.Cmd {
 		if err != nil {
 			slog.Error("Error opening SSM shell", "error", err)
 		}
-		m.View()
+		cmd = func() tea.Msg {
+			return SsmSessionFinishedMsg{}
+		}
 	}
 
-	return nil
+	return cmd
 }
 
 func (m Ec2ViewModel) ssmShell() error {
@@ -355,6 +364,10 @@ func (m Ec2ViewModel) ssmShell() error {
 	instance, ok := selectedItem.(aws.Ec2Instance)
 	if !ok {
 		return fmt.Errorf("Failed to open SSM Shell: Selected item is not instance")
+	}
+
+	if instance.State != "running" {
+		return fmt.Errorf("Selected instance is not running")
 	}
 
 	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)

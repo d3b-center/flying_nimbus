@@ -20,8 +20,6 @@ type SsmService struct {
 // SsmSessionType represents the kind of SSM session to start.
 type SsmSessionType int
 
-type SsmSessionFinishedMsg struct{}
-
 const (
 	// SessionTypeShell starts an interactive shell session.
 	SessionTypeShell SsmSessionType = iota
