@@ -2,30 +2,25 @@
 package aws
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 )
 
-// SsmAPI defines the SSM API methods used by SsmService.
-type SsmAPI interface {
-	DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error)
-}
 
 // SsmService provides SSM session and port forwarding operations.
 type SsmService struct {
-	api    SsmAPI
 	region string
 }
 
 // SsmSessionType represents the kind of SSM session to start.
 type SsmSessionType int
+
+type SsmSessionFinishedMsg struct{}
 
 const (
 	// SessionTypeShell starts an interactive shell session.
@@ -50,42 +45,13 @@ type SsmInstanceStatus struct {
 	AgentVersion string
 }
 
-// NewSsmService creates a new SsmService.
-func NewSsmService(api SsmAPI, region string) *SsmService {
-	return &SsmService{api: api, region: region}
+// InitSsmService creates a new SsmService.
+func InitSsmService(cfg aws.Config) *SsmService {
+	return &SsmService{
+		region: cfg.Region,
+	}
 }
 
-// GetInstanceStatus checks if an instance is managed by SSM.
-func (s *SsmService) GetInstanceStatus(ctx context.Context, instanceID string) (*SsmInstanceStatus, error) {
-	input := &ssm.DescribeInstanceInformationInput{
-		Filters: []ssmtypes.InstanceInformationStringFilter{
-			{
-				Key:    aws.String("InstanceIds"),
-				Values: []string{instanceID},
-			},
-		},
-	}
-
-	result, err := s.api.DescribeInstanceInformation(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe instance info: %w", err)
-	}
-
-	status := &SsmInstanceStatus{
-		InstanceID: instanceID,
-		IsManaged:  false,
-		PingStatus: "Unknown",
-	}
-
-	if len(result.InstanceInformationList) > 0 {
-		info := result.InstanceInformationList[0]
-		status.IsManaged = true
-		status.PingStatus = string(info.PingStatus)
-		status.AgentVersion = aws.ToString(info.AgentVersion)
-	}
-
-	return status, nil
-}
 
 // BuildSessionCmd builds an exec.Cmd for an interactive SSM shell session.
 func (s *SsmService) BuildSessionCmd(instanceID string) *exec.Cmd {
@@ -94,6 +60,9 @@ func (s *SsmService) BuildSessionCmd(instanceID string) *exec.Cmd {
 		"--target", instanceID,
 		"--region", s.region,
 	}
+	slog.Debug("SSM Command", "args", args)
+	// Clear screen for UX
+	fmt.Print("\033[2J\033[H")
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

@@ -22,6 +22,14 @@ var (
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
 	)
+	leftKey key.Binding = key.NewBinding(
+		key.WithKeys("left", "h"),
+		key.WithHelp("left/h", "left"),
+	)
+	rightKey key.Binding = key.NewBinding(
+		key.WithKeys("right", "l"),
+		key.WithHelp("right/l", "right"),
+	)
 )
 
 const (
@@ -42,7 +50,6 @@ func GenerateTagRows(tags map[string]string) []string {
 	}
 
 	for key, value := range tags {
-		slog.Debug("Appending tag", "key", key, "value", value)
 		rows = append(rows, common.KV("  "+key, value))
 	}
 

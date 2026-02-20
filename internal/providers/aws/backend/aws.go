@@ -15,6 +15,7 @@ type AwsService struct {
 	Rds            *RdsService
 	Sg             *SgService
 	ServiceCatalog *ServiceCatalogService
+	Ssm            *SsmService
 }
 
 func InitAwsService(ctx context.Context) (*AwsService, error) {
@@ -33,12 +34,15 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	sg := InitSgService(cfg)
 
+	ssm := InitSsmService(cfg)
+
 	return &AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
 		Rds:            rds,
 		Sg:             sg,
 		ServiceCatalog: serviceCatalog,
+		Ssm: ssm,
 	}, nil
 
 }

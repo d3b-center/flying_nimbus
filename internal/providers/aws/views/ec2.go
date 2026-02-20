@@ -15,9 +15,18 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const ec2InstanceListWidthRatio = 0.25
+type Ec2Action int
+const (
+	ec2InstanceListWidthRatio = 0.25
+
+	Ec2ActionSSMShell Ec2Action = iota
+	Ec2ActionSSMPortForward
+	Ec2ActionStartInstance
+	Ec2ActionStopInstance
+) 
 
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
@@ -26,14 +35,24 @@ type Ec2ViewModel struct {
 	loader               spinner.Model
 	isLoading            bool
 	instanceDetail       string
-	detailsFocused       bool
+	isDetailViewportFocused       bool
 	detailViewport       viewport.Model
 	windowSize           common.ContentWindowSizeMsg
 	instanceListWidth    int
 	detailsWidth         int
 	contentHeight        int
 	inputRoutingStrategy common.InputRoutingStrategy
+	actionModel         ActionModel
+	isActionModalActive bool
+}
 
+func ec2Actions() []ModalAction {
+	return []ModalAction{
+		{Label: "Shell", Action: Ec2ActionSSMShell},
+		// {Label: "Port Fwd", Action: Ec2ActionSSMPortForward},
+		// {Label: "Start", Action: Ec2ActionStartInstance},
+		// {Label: "Stop", Action: Ec2ActionStopInstance},
+	}
 }
 
 type (
@@ -57,14 +76,17 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 
 	vp := viewport.New(windowSize.Width, windowSize.Height)
 
+	am := NewActionModal("EC2 Actions", ec2Actions())
+
 	m := Ec2ViewModel{
 		app:            appService,
 		list:           l,
 		loader:         loader,
 		isLoading:      true,
-		detailsFocused: false,
+		isDetailViewportFocused: false,
 		detailViewport: vp,
 		windowSize:     windowSize,
+		actionModel: am,
 	}
 	m.updateLayout(windowSize)
 
@@ -109,7 +131,7 @@ func (m Ec2ViewModel) View() string {
 	detailStyle := common.InstanceDetailStyle.
 		MaxHeight(m.windowSize.Height)
 
-	if m.detailsFocused {
+	if m.isDetailViewportFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
 		listStyle = listStyle.BorderForeground(unfocusedColor)
 	} else {
@@ -121,8 +143,20 @@ func (m Ec2ViewModel) View() string {
 
 	left := listStyle.Render(m.list.View())
 	right := m.detailViewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	if m.isActionModalActive {
+		return overlay.Composite(
+			m.actionModel.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 // Update handles messages and updates the model state.
@@ -149,6 +183,15 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newLoader, cmd := m.loader.Update(msg)
 		m.loader = newLoader
 		cmds = append(cmds, cmd)
+
+	case ModalSelectMsg:
+		m.isActionModalActive = false
+		action := msg.Action.(ModalAction)
+		return m, m.handleEc2Action(action)
+
+	case ModalCancelMsg:
+		m.isActionModalActive = false
+		return m, nil
 
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
@@ -264,22 +307,57 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
+	if m.isActionModalActive {
+		m.actionModel, cmd = m.actionModel.Update(msg)
+		return cmd
+	}
+
 	if key.Matches(msg, toggleFocus) {
-		m.detailsFocused = !m.detailsFocused
+		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		return nil
 	}
 
-	if m.detailsFocused {
+	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 	} else {
 		m.list, cmd = m.list.Update(msg)
 	}
-	case "enter":
-		m.openActionMenu
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		slog.Debug("Entering action modal")
+		m.isActionModalActive = true
+	}
 
 	return cmd
 }
 
-func (m *Ec2ViewModel) openActionMenu() {
-	
+func (m *Ec2ViewModel) handleEc2Action(action ModalAction) tea.Cmd {
+	ec2Action := action.Action
+	switch ec2Action {
+	case Ec2ActionSSMShell:
+		slog.Info("Opening SSM Shell")
+		err := m.ssmShell()
+		if err != nil {
+			slog.Error("Error opening SSM shell", "error", err)
+		}
+		m.View()
+	}
+
+	return nil
 }
+
+func (m Ec2ViewModel) ssmShell() error {
+	if m.list.SelectedItem() == nil {
+		return fmt.Errorf("Failed to open SSM Shell: Selected item is nil")
+	}
+
+	selectedItem := m.list.SelectedItem()
+	instance, ok := selectedItem.(aws.Ec2Instance)
+	if !ok {
+		return fmt.Errorf("Failed to open SSM Shell: Selected item is not instance")
+	}
+
+	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
+	return command.Run()
+}
+

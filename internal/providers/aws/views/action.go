@@ -5,86 +5,136 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/bubbles/key"
+	"flying_nimbus/internal/tui/constants"
+	"log/slog"
 )
 
-const (
-	// ActionSSMShell ModalAction = iota
-	// ActionSSMPortForward
-	// ActionSSMRemotePortForward
-	// ActionStartInstance
-	// ActionStopInstance
+var (
+	modalOverlayStyle = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		Padding(1, 2)
 
-	leftKey key.Binding = key.NewBinding(
-		key.WithKeys("left", "h"),
-		key.WithHelp("left/h", "left"),
-	)
-	rightKey key.Binding = key.NewBinding(
-		key.WithKeys("right", "l"),
-		key.WithHelp("right/l", "right"),
-	)
+	modalTitleStyle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("62"))
+
+	modalActiveStyle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("170")).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("170")).
+		Padding(0, 2)
+
+	modalInactiveStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("241")).
+		Padding(0, 2)
+
+	modalHelpStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241"))
 )
 
 type ModalAction struct {
-	label string
-	action func
+	Label string
+	Action any // Implementer makes an enum of actions
+}
+
+type ModalSelectMsg struct {
+	Action any
 }
 
 type ModalCancelMsg struct{}
 
-type ModalModel struct {
+type ActionModel struct {
 	title string
 	cursor int
+	inputRoutingStrategy common.InputRoutingStrategy
 	actions []ModalAction
 }
 
-func NewModal(title string, actions []ModalAction) ModalModel {
+func NewActionModal(title string, actions []ModalAction) ActionModel {
 	if len(actions) == 0 {
 		slog.Error("No actions given to modal!")
-		actions = {}
 	}
 
-	return ModalModel{
+	return ActionModel{
 		title: title,
 		cursor: 0,
 		actions: actions,
+		inputRoutingStrategy: common.RouteFocusedFirst,
 	}
 }
 
-func (m ModalModel) Commands() common.Commands {
-	keys := make([]key.Binding, 2)
-
-	keys.append(leftKey)
-	keys.append(rightKey)
-
-	return keys
+func (m ActionModel) Commands() common.Commands {
+	return []key.Binding{leftKey, rightKey}
 }
 
-func (m ModalModel) Update(msg tea.Msg) (ModalModel, tea.Cmd) {
+func (m ActionModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return m.inputRoutingStrategy
+}
+
+func (m ActionModel) Init() tea.Cmd {
+	slog.Debug("Initializing action modal")
+	return nil // Doesn't do anything on initialization
+}
+
+func (m ActionModel) Update(msg tea.Msg) (ActionModel, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		cmd = handleKeypress(msg)
+		cmd = m.handleKeypress(msg)
 	}
 
 	return m, cmd
 }
 
-func (m ModalModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
-	if key.Matches(msg, rightKey) {
-		if cursor == len(m.actions) - 1 {
-			cursor = 0
-		} else {
-			cursor += 1
+func (m ActionModel) View() string {
+	var buttons []string
+
+	for i, action := range m.actions {
+		style := modalInactiveStyle
+		if i == m.cursor {
+			style = modalActiveStyle
 		}
-	}
-	if key.Matches(msg, leftKey) {
-		if cursor == 0 {
-			cursor = len(m.actions) - 1
-		} else {
-			cursor -= 1
-		}
+		buttons = append(buttons, style.Render(action.Label))
 	}
 
-	return nil
+	row := lipgloss.JoinHorizontal(lipgloss.Center, buttons...)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Center,
+		modalTitleStyle.Render(m.title),
+		row,
+		modalHelpStyle.Render("←/→: navigate • enter: select • esc: cancel"),
+	)
+
+	return modalOverlayStyle.Render(content)
+}
+
+func (m *ActionModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
+	slog.Debug("Action Modal Keypress", "key", msg)
+	var cmd tea.Cmd
+	if key.Matches(msg, rightKey) {
+		m.cursor = (m.cursor + 1) % len(m.actions)
+	}
+	if key.Matches(msg, leftKey) {
+		// Add len of actions to avoid negatives
+		m.cursor = (m.cursor - 1 + len(m.actions)) % len(m.actions)
+	}
+	if key.Matches(msg, constants.Keymap.Enter) {
+		selected := m.actions[m.cursor]
+		cmd = func() tea.Msg {
+			return ModalSelectMsg{selected}
+		}
+	}
+	// if key.Matches(msg, tui.DefaultKeymap.Back) {
+	// 	cmd = func() tea.Msg {
+	// 		return ModalCancelMsg{}
+	// 	}
+	// }
+
+	return cmd
 }
