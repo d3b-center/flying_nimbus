@@ -38,6 +38,8 @@ type EbsVolume struct {
 type ec2API interface {
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFuncs ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error)
+	StartInstances(ctx context.Context, params *ec2.StartInstancesInput, optFns ...func(*ec2.Options)) (*ec2.StartInstancesOutput, error)
+	StopInstances(ctx context.Context, params *ec2.StopInstancesInput, optFns ...func(*ec2.Options)) (*ec2.StopInstancesOutput, error)
 }
 
 // Ec2Service provides methods for interacting with EC2 instances.
@@ -92,7 +94,23 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 	return volumes, nil
 }
 
-func (e Ec2Service) DescribeInstance(ctx context.Context, instanceId string) (Ec2Instance, error) {
+// StartInstance attempts to start EC2 instance given InstanceId
+func (e Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
+	input := ec2.StartInstancesInput{InstanceIds: []string{instanceId}}
+	_, err := e.api.StartInstances(ctx, &input)
+
+	return err
+}
+
+// StopInstance attempts to stop EC2 instance given InstanceId
+func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
+	input := ec2.StopInstancesInput{InstanceIds: []string{instanceId}}
+	_, err := e.api.StopInstances(ctx, &input)
+
+	return err
+}
+
+func (e Ec2Service) RefreshInstanceState(ctx context.Context, instanceId string) (Ec2Instance, error) {
 
 	return Ec2Instance{}, nil
 }
@@ -100,7 +118,6 @@ func (e Ec2Service) DescribeInstance(ctx context.Context, instanceId string) (Ec
 // ListInstances retrieves all EC2 instances with pagination.
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	input := ec2.DescribeInstancesInput{}
-
 	return e.paginatedDescribeInstances(ctx, input)
 }
 

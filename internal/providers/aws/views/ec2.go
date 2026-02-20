@@ -21,6 +21,28 @@ import (
 const (
 	ec2InstanceListWidthRatio = 0.25
 )
+const ec2InstanceListWidthRatio = 0.25
+
+var startStopInstance = key.NewBinding(
+	key.WithKeys("s"),
+	key.WithHelp("s", "Start/Stop Ec2"),
+)
+
+// Ec2ViewModel manages the EC2 instance list and details view.
+type Ec2ViewModel struct {
+	app                  *app.App
+	list                 list.Model
+	loader               spinner.Model
+	isLoading            bool
+	instanceDetail       string
+	detailsFocused       bool
+	detailViewport       viewport.Model
+	windowSize           common.ContentWindowSizeMsg
+	instanceListWidth    int
+	detailsWidth         int
+	contentHeight        int
+	inputRoutingStrategy common.InputRoutingStrategy
+}
 
 type (
 	ec2InstancesLoadedMsg []list.Item
@@ -84,12 +106,18 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
+func startInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.Cmd {
+	return func() tea.Msg {
+
+	}
+}
+
 func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 	return m.inputRoutingStrategy
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return []key.Binding{toggleFocus}
+	return []key.Binding{toggleFocus, forceRefresh, startStopInstance}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -253,7 +281,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
-	rows = append(rows, GenerateEbsVolumeRows(instance.Volumes)...)
+	rows = append(rows, GenerateEbsVolumeRows(instance.VolumeIds)...)
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
 	rows = append(rows, GenerateTagRows(instance.Tags)...)
@@ -360,4 +388,20 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 		return ModalResponseMsg{err}
 	})
 
+}
+
+func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
+
+	if m.isLoading {
+		return nil
+	}
+
+	instance, ok := m.list.SelectedItem().(aws.Ec2Instance)
+	if !ok {
+		return nil
+	}
+
+	if instance.State == "Running" {
+
+	}
 }
