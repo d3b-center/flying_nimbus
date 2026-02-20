@@ -163,7 +163,7 @@ func TestS3Service_ListObjectsError(t *testing.T) {
 	tree, err := s3Service.ListBucketObjects(context.Background(), "some-bucket")
 
 	if err == nil {
-		fmt.Errorf("err should be nil, got %v", err)
+		fmt.Errorf("err should be \"cannot get buckets\", got nil")
 	} else if err.Error() != "cannot get buckets" {
 		fmt.Errorf("Error() should be \"cannot get buckets\", got %q", err.Error())
 	}
