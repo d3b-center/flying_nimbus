@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -62,7 +63,6 @@ func TestS3Service_ListBucketsSuccess(t *testing.T) {
 	}
 
 	s3Service := S3Service{api: mockApi}
-	_ = s3Service
 
 	buckets, err := s3Service.ListBuckets(context.Background())
 	if err != nil {
@@ -71,5 +71,27 @@ func TestS3Service_ListBucketsSuccess(t *testing.T) {
 
 	if len(buckets) != 2 {
 		t.Errorf("expected 2 buckets, got %d", len(buckets))
+	}
+}
+
+func TestS3Service_ListBucketsErr(t *testing.T) {
+	mockApi := mockS3API{
+		bucketsErr: fmt.Errorf("error 123"),
+	}
+
+	s3Service := S3Service{api: mockApi}
+
+	buckets, err := s3Service.ListBuckets(context.Background())
+
+	if buckets != nil {
+		t.Errorf("returned buckets should be nil, got %v", buckets)
+	}
+
+	if err == nil {
+		t.Errorf("err should be nil, got %v", err)
+	}
+
+	if err.Error() != "error 123" {
+		t.Errorf("err.Error() should be \"error 123\", got %q", err.Error())
 	}
 }
