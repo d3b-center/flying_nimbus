@@ -118,9 +118,6 @@ func (m S3BucketsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug(fmt.Sprintf("Size of list %d", len(m.list.Items())))
 
 		if len(msg) > 0 {
-			// we don't have ec2 instance details, but maybe this is where we also load
-			// the bucket's objects?
-			// m.updateInstanceDetails()
 			m.updateLayout(m.windowSize)
 		}
 
@@ -134,6 +131,13 @@ func (m S3BucketsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isLoading = true
 			cmd := listS3BucketsCmd(m.app.Context, m.app.AWS.S3)
 			cmds = append(cmds, cmd)
+		} else if key.Matches(msg, constants.Keymap.Enter) {
+			currentItem := m.list.SelectedItem()
+			bucket := currentItem.(aws.S3Bucket)
+			cmds = append(cmds, func() tea.Msg {
+
+				return common.NavigateMsg{InitS3FilesViewModel(m.app, bucket.Name, m.windowSize)}
+			})
 		} else {
 			newList, cmd := m.list.Update(msg)
 			m.list = newList
@@ -174,16 +178,17 @@ type S3FilesViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	contentHeight        int
 	bucketName           string
+	currentDir           string
 	fileTree             *aws.S3FileTree
 }
 
-func InitS3FilesViewModel(appService *app.App, bucketName string, tree *aws.S3FileTree, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
+func InitS3FilesViewModel(appService *app.App, bucketName string, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
 	slog.Debug("initialize S3 files view model")
 
 	items := []list.Item{}
 
 	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
-	l.Title = fmt.Sprintf("Browsing bucket %s", bucketName)
+	l.Title = fmt.Sprintf("Browsing %s%s", bucketName, "/")
 
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
@@ -192,10 +197,11 @@ func InitS3FilesViewModel(appService *app.App, bucketName string, tree *aws.S3Fi
 	m := S3FilesViewModel{
 		app:        appService,
 		loader:     loader,
+		list:       l,
 		isLoading:  true,
 		windowSize: windowSize,
 		bucketName: bucketName,
-		fileTree:   tree,
+		currentDir: "/",
 	}
 
 	return m
@@ -216,4 +222,114 @@ func listS3FilesCmd(ctx context.Context, s3Service *aws.S3Service, bucketName st
 		fileTree, _ := s3Service.ListBucketObjects(ctx, bucketName)
 		return s3FilesLoadedMsg{bucketName, fileTree}
 	}
+}
+
+// updateLayout recalculates and applies layout dimensions.
+// copy pasted again from other model, could probably be deduplicated
+func (m *S3FilesViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
+	m.windowSize = msg
+
+	usableWidth := msg.Width - BorderWidth
+	usableHeight := msg.Height - BorderHeight
+
+	m.listWidth = usableWidth
+
+	m.contentHeight = usableHeight
+
+	m.list.SetSize(m.listWidth, usableHeight)
+}
+
+func (m S3FilesViewModel) Commands() common.Commands {
+	return []key.Binding{toggleFocus}
+}
+
+func (m S3FilesViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	return m.inputRoutingStrategy
+}
+
+func (m S3FilesViewModel) Title() string {
+	return fmt.Sprintf("Bucket '%s'", m.bucketName)
+}
+
+type regularFileListItem struct {
+	name string
+}
+
+func (i regularFileListItem) Title() string {
+	return i.name
+}
+
+func (i regularFileListItem) FilterValue() string {
+	return i.name
+}
+
+type subdirListItem struct {
+	name     string
+	fileTree *aws.S3FileTree
+}
+
+func (i subdirListItem) Title() string {
+	return i.name
+}
+
+func (i subdirListItem) FilterValue() string {
+	return i.name
+}
+
+func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch msg := msg.(type) {
+	case common.ContentWindowSizeMsg:
+		slog.Debug(fmt.Sprintf("Received WindowSizeMsg %v", msg))
+		m.updateLayout(msg)
+
+	case s3FilesLoadedMsg:
+		m.isLoading = false
+		m.fileTree = msg.fileTree
+		listItems := []list.Item{}
+		if msg.fileTree != nil {
+			for _, filename := range msg.fileTree.Files {
+				listItems = append(listItems, regularFileListItem{filename})
+			}
+			for k, v := range msg.fileTree.Subdirs {
+				listItems = append(listItems, subdirListItem{k, v})
+			}
+		}
+		m.list.SetItems(listItems)
+		m.updateLayout(m.windowSize)
+
+	case spinner.TickMsg:
+		newLoader, cmd := m.loader.Update(msg)
+		m.loader = newLoader
+		cmds = append(cmds, cmd)
+
+	case tea.KeyMsg:
+		if key.Matches(msg, forceRefresh) {
+			m.isLoading = true
+			cmd := listS3BucketsCmd(m.app.Context, m.app.AWS.S3)
+			cmds = append(cmds, cmd)
+		} else if key.Matches(msg, constants.Keymap.Enter) {
+			// if selected is dir, push dir onto stack
+		} else {
+			newList, cmd := m.list.Update(msg)
+			m.list = newList
+			cmds = append(cmds, cmd)
+		}
+
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m S3FilesViewModel) View() string {
+	if m.isLoading {
+		return constants.DocStyle.Render(m.loader.View() + "\n")
+	}
+
+	listStyle := common.InstancesListStyle.
+		MaxHeight(m.windowSize.Height).
+		BorderForeground(focusedColor)
+
+	return listStyle.Render(m.list.View())
 }
