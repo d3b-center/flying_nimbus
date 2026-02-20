@@ -51,9 +51,9 @@ type Ec2ViewModel struct {
 func ec2Actions() []ModalAction {
 	return []ModalAction{
 		{Label: "Shell", Action: Ec2ActionSSMShell},
-		// {Label: "Port Fwd", Action: Ec2ActionSSMPortForward},
-		// {Label: "Start", Action: Ec2ActionStartInstance},
-		// {Label: "Stop", Action: Ec2ActionStopInstance},
+		{Label: "Port Fwd", Action: Ec2ActionSSMPortForward},
+		{Label: "Start", Action: Ec2ActionStartInstance},
+		{Label: "Stop", Action: Ec2ActionStopInstance},
 	}
 }
 
@@ -192,10 +192,12 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleEc2Action(action)
 
 	case ModalCancelMsg:
+		slog.Debug("Modal cancel msg")
 		m.isActionModalActive = false
 		return m, nil
 
 	case SsmSessionFinishedMsg:
+		m.isActionModalActive = false
 		return m, tea.ClearScreen
 
 	case tea.KeyMsg:
@@ -204,6 +206,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
 			cmds = append(cmds, cmd)
 		}
+		
 		cmd := m.handleKeypress(msg)
 		cmds = append(cmds, cmd)
 	default:
@@ -217,12 +220,8 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} else {
-		m.inputRoutingStrategy = common.RouteGlobalFirst
-	}
+	m.updateInputRouting()
+	
 	return m, tea.Batch(cmds...)
 }
 
@@ -374,3 +373,15 @@ func (m Ec2ViewModel) ssmShell() error {
 	return command.Run()
 }
 
+func (m *Ec2ViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	} 
+
+	if m.isActionModalActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
+}

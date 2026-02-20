@@ -1,7 +1,6 @@
 package views
 
 import (
-	"encoding/json"
 	"flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"fmt"
@@ -41,8 +40,6 @@ const (
 // GenerateTagRows takes tags and formats them for rendering
 func GenerateTagRows(tags map[string]string) []string {
 	var rows []string
-	debug, _ := json.Marshal(tags)
-	slog.Debug(string(debug))
 
 	if len(tags) == 0 {
 		slog.Debug("No tags found")
