@@ -152,3 +152,24 @@ func TestS3Service_ListObjectsSuccess(t *testing.T) {
 		t.Errorf("expected and actual file tree differ.\n Expected: %s\n\n Actual  : %s", expectedJson, actualJson)
 	}
 }
+
+func TestS3Service_ListObjectsError(t *testing.T) {
+	mockApi := mockS3API{
+		objectsErr: fmt.Errorf("cannot get buckets"),
+	}
+
+	s3Service := S3Service{api: mockApi}
+
+	tree, err := s3Service.ListBucketObjects(context.Background(), "some-bucket")
+
+	if err == nil {
+		fmt.Errorf("err should be nil, got %v", err)
+	} else if err.Error() != "cannot get buckets" {
+		fmt.Errorf("Error() should be \"cannot get buckets\", got %q", err.Error())
+	}
+
+	if tree != nil {
+		treeJson, _ := json.Marshal(tree)
+		fmt.Errorf("tree should be nil, got:\n %s", treeJson)
+	}
+}
