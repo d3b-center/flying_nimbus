@@ -47,6 +47,10 @@ type Ec2ViewModel struct {
 type (
 	ec2InstancesLoadedMsg []list.Item
 	SsmSessionFinishedMsg struct{ err error }
+	ec2InstancesLoadedMsg   []list.Item
+	instanceActionStatusMsg struct {
+		Err error
+	}
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -106,9 +110,17 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
-func startInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.Cmd {
+func startInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
 	return func() tea.Msg {
+		err := ec2Service.StartInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
+	}
+}
 
+func stopInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
+	return func() tea.Msg {
+		err := ec2Service.StopInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
 	}
 }
 
@@ -340,12 +352,16 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if key.Matches(msg, toggleFocus) {
-		m.isDetailViewportFocused = !m.isDetailViewportFocused
-		return nil
+	if key.Matches(msg, forceRefresh) {
+		m.isLoading = true
+		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 	}
 
-	if m.isDetailViewportFocused {
+	if key.Matches(msg, startStopInstance) {
+		return m.handleStartStop()
+	}
+
+	if m.detailsFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 		return cmd
 	} else {
@@ -391,7 +407,6 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 }
 
 func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
-
 	if m.isLoading {
 		return nil
 	}
@@ -401,7 +416,10 @@ func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
 		return nil
 	}
 
-	if instance.State == "Running" {
-
+	if instance.State == "running" {
+		return stopInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
+	} else if instance.State == "stopped" {
+		return startInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
 	}
+	return nil
 }
