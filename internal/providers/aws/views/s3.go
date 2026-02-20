@@ -42,15 +42,12 @@ func InitS3ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
-	// vp := viewport.New(windowSize.Width, windowSize.Height)
-
 	m := S3BucketsViewModel{
 		app:        appService,
 		list:       l,
 		loader:     loader,
 		isLoading:  true,
 		windowSize: windowSize,
-		// detailViewport: vp,
 	}
 	m.updateLayout(windowSize)
 
@@ -58,7 +55,7 @@ func InitS3ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg
 }
 
 func (m S3BucketsViewModel) Init() tea.Cmd {
-	slog.Debug("Initialize S3 BubbleTea model")
+	slog.Debug("Initialize S3 buckets BubbleTea model")
 	return tea.Batch(m.loader.Tick, listS3BucketsCmd(m.app.Context, m.app.AWS.S3))
 }
 
@@ -85,14 +82,9 @@ func (m *S3BucketsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - BorderWidth
 	usableHeight := msg.Height - BorderHeight
 
-	// m.bucketsListWidth = int(float64(usableWidth) * s3BucketListWidthRatio)
 	m.bucketsListWidth = usableWidth
-	// m.detailsWidth = usableWidth - m.bucketsListWidth
 
 	m.contentHeight = usableHeight
-
-	// m.detailViewport.Width = m.detailsWidth
-	// m.detailViewport.Height = msg.Height
 
 	m.list.SetSize(m.bucketsListWidth, usableHeight)
 }
@@ -168,4 +160,60 @@ func (m S3BucketsViewModel) View() string {
 		BorderForeground(focusedColor)
 
 	return listStyle.Render(m.list.View())
+}
+
+type S3FilesViewModel struct {
+	app *app.App
+	// the current level of directory will have a list of children, both files and subdirs
+	list      list.Model
+	loader    spinner.Model
+	isLoading bool
+
+	listWidth            int
+	windowSize           common.ContentWindowSizeMsg
+	inputRoutingStrategy common.InputRoutingStrategy
+	contentHeight        int
+	bucketName           string
+	fileTree             *aws.S3FileTree
+}
+
+func InitS3FilesViewModel(appService *app.App, bucketName string, tree *aws.S3FileTree, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
+	slog.Debug("initialize S3 files view model")
+
+	items := []list.Item{}
+
+	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
+	l.Title = fmt.Sprintf("Browsing bucket %s", bucketName)
+
+	loader := spinner.New()
+	loader.Style = common.SpinnerStyle
+	loader.Spinner = spinner.Points
+
+	m := S3FilesViewModel{
+		app:        appService,
+		loader:     loader,
+		isLoading:  true,
+		windowSize: windowSize,
+		bucketName: bucketName,
+		fileTree:   tree,
+	}
+
+	return m
+}
+
+func (m S3FilesViewModel) Init() tea.Cmd {
+	slog.Debug("Initialize S3 files BubbleTea model")
+	return tea.Batch(m.loader.Tick, listS3FilesCmd(m.app.Context, m.app.AWS.S3, m.bucketName))
+}
+
+type s3FilesLoadedMsg struct {
+	bucketName string
+	fileTree   *aws.S3FileTree
+}
+
+func listS3FilesCmd(ctx context.Context, s3Service *aws.S3Service, bucketName string) tea.Cmd {
+	return func() tea.Msg {
+		fileTree, _ := s3Service.ListBucketObjects(ctx, bucketName)
+		return s3FilesLoadedMsg{bucketName, fileTree}
+	}
 }
