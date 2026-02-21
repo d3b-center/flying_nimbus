@@ -294,32 +294,7 @@ func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case s3FilesLoadedMsg:
 		m.isLoading = false
-		listItems := []list.Item{}
-		fileTree := msg.fileTree
-
-		for _, pathComponent := range m.currentPath {
-			subdir, ok := fileTree.Subdirs[pathComponent]
-			if !ok {
-				break
-			}
-			fileTree = subdir
-		}
-
-		if fileTree != nil {
-			for _, filename := range fileTree.Files {
-				// the tree having empty string is because the s3 bucket shows an object with
-				// a trailing slash. I'm not sure if that is just an entry indicating that the
-				// prefix exists, or if there is an actual file with a trailing slash. I think
-				// the former, so omit the empty items
-				if filename != "" {
-					listItems = append(listItems, regularFileListItem{filename})
-				}
-			}
-			for k, v := range fileTree.Subdirs {
-				listItems = append(listItems, subdirListItem{k, v})
-			}
-		}
-		m.list.SetItems(listItems)
+		m.list.SetItems(getSubtreeListItems(m.currentPath, msg.fileTree))
 		m.updateLayout(m.windowSize)
 
 	case spinner.TickMsg:
@@ -353,6 +328,34 @@ func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func getSubtreeListItems(path []string, fileTree *aws.S3FileTree) []list.Item {
+	listItems := []list.Item{}
+	for _, pathComponent := range path {
+		subdir, ok := fileTree.Subdirs[pathComponent]
+		if !ok {
+			break
+		}
+		fileTree = subdir
+	}
+
+	if fileTree != nil {
+		for _, filename := range fileTree.Files {
+			// the tree having empty string is because the s3 bucket shows an object with
+			// a trailing slash. I'm not sure if that is just an entry indicating that the
+			// prefix exists, or if there is an actual file with a trailing slash. I think
+			// the former, so omit the empty items
+			if filename != "" {
+				listItems = append(listItems, regularFileListItem{filename})
+			}
+		}
+		for k, v := range fileTree.Subdirs {
+			listItems = append(listItems, subdirListItem{k, v})
+		}
+	}
+
+	return listItems
 }
 
 func (m S3FilesViewModel) View() string {
