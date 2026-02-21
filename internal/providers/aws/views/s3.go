@@ -8,6 +8,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -135,8 +136,8 @@ func (m S3BucketsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			currentItem := m.list.SelectedItem()
 			bucket := currentItem.(aws.S3Bucket)
 			cmds = append(cmds, func() tea.Msg {
-
-				return common.NavigateMsg{InitS3FilesViewModel(m.app, bucket.Name, m.windowSize)}
+				subdirModel := InitS3FilesViewModel(m.app, bucket.Name, []string{}, m.windowSize)
+				return common.NavigateMsg{subdirModel}
 			})
 		} else {
 			newList, cmd := m.list.Update(msg)
@@ -178,30 +179,30 @@ type S3FilesViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	contentHeight        int
 	bucketName           string
-	currentDir           string
+	currentPath          []string
 	fileTree             *aws.S3FileTree
 }
 
-func InitS3FilesViewModel(appService *app.App, bucketName string, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
+func InitS3FilesViewModel(appService *app.App, bucketName string, path []string, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
 	slog.Debug("initialize S3 files view model")
 
 	items := []list.Item{}
 
 	l := list.New(items, list.NewDefaultDelegate(), windowSize.Height, 0)
-	l.Title = fmt.Sprintf("Browsing %s%s", bucketName, "/")
+	l.Title = fmt.Sprintf("Browsing %s/%s", bucketName, strings.Join(path, "/"))
 
 	loader := spinner.New()
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
 	m := S3FilesViewModel{
-		app:        appService,
-		loader:     loader,
-		list:       l,
-		isLoading:  true,
-		windowSize: windowSize,
-		bucketName: bucketName,
-		currentDir: "/",
+		app:         appService,
+		loader:      loader,
+		list:        l,
+		isLoading:   true,
+		windowSize:  windowSize,
+		bucketName:  bucketName,
+		currentPath: path,
 	}
 
 	return m
@@ -294,16 +295,32 @@ func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case s3FilesLoadedMsg:
 		m.isLoading = false
-		m.fileTree = msg.fileTree
 		listItems := []list.Item{}
-		if msg.fileTree != nil {
-			for _, filename := range msg.fileTree.Files {
-				listItems = append(listItems, regularFileListItem{filename})
+		fileTree := msg.fileTree
+
+		for _, pathComponent := range m.currentPath {
+			subdir, ok := fileTree.Subdirs[pathComponent]
+			if !ok {
+				break
 			}
-			for k, v := range msg.fileTree.Subdirs {
+			fileTree = subdir
+		}
+
+		if fileTree != nil {
+			for _, filename := range fileTree.Files {
+				// the tree having empty string is because the s3 bucket shows an object with
+				// a trailing slash. I'm not sure if that is just an entry indicating that the
+				// prefix exists, or if there is an actual file with a trailing slash. I think
+				// the former, so omit the empty items
+				if filename != "" {
+					listItems = append(listItems, regularFileListItem{filename})
+				}
+			}
+			for k, v := range fileTree.Subdirs {
 				listItems = append(listItems, subdirListItem{k, v})
 			}
 		}
+		m.fileTree = fileTree
 		m.list.SetItems(listItems)
 		m.updateLayout(m.windowSize)
 
@@ -318,7 +335,17 @@ func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := listS3BucketsCmd(m.app.Context, m.app.AWS.S3)
 			cmds = append(cmds, cmd)
 		} else if key.Matches(msg, constants.Keymap.Enter) {
-			// if selected is dir, push dir onto stack
+			item := m.list.SelectedItem()
+			subdir, ok := item.(subdirListItem)
+			if ok {
+				cmds = append(cmds, func() tea.Msg {
+					// TODO this forces it to load again, this is unnecessary but requires
+					// possibly splitting up the model into a new subdir model or otherwise
+					// changing the logic
+					subdirModel := InitS3FilesViewModel(m.app, m.bucketName, append(m.currentPath, subdir.name), m.windowSize)
+					return common.NavigateMsg{subdirModel}
+				})
+			}
 		} else {
 			newList, cmd := m.list.Update(msg)
 			m.list = newList
