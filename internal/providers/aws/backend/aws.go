@@ -14,6 +14,7 @@ type AwsService struct {
 	Ec2            *Ec2Service
 	Rds            *RdsService
 	Sg             *SgService
+	S3             *S3Service
 	ServiceCatalog *ServiceCatalogService
 }
 
@@ -33,11 +34,14 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	sg := InitSgService(cfg)
 
+	s3 := InitS3Service(cfg)
+
 	return &AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
 		Rds:            rds,
 		Sg:             sg,
+		S3:             s3,
 		ServiceCatalog: serviceCatalog,
 	}, nil
 
