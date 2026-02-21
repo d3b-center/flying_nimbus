@@ -30,19 +30,6 @@ type S3Object struct {
 	Name string
 }
 
-// TODO don't think I need these methods, will use a different strategy to display these
-func (o S3Object) Title() string {
-	return o.Name
-}
-
-func (o S3Object) Description() string {
-	return o.Name
-}
-
-func (o S3Object) FilterValue() string {
-	return o.Name
-}
-
 type s3API interface {
 	ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFuncs ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
 	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
