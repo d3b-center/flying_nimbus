@@ -37,4 +37,18 @@ func TestGetSubtreeListItems(t *testing.T) {
 	if len(listItems) != 4 {
 		t.Errorf("wrong list length, should be 4 got %d", len(listItems))
 	}
+
+	item0, ok := listItems[0].(regularFileListItem)
+	if !ok {
+		t.Errorf("list item should be regularFileListItem, is not")
+	} else if item0.name != "file3" {
+		t.Errorf("name should be file3, got %q", item0.name)
+	}
+
+	item1, ok := listItems[1].(regularFileListItem)
+	if !ok {
+		t.Errorf("list item should be regularFileListItem, is not")
+	} else if item1.name != "file4" {
+		t.Errorf("name should be file4, got %q", item0.name)
+	}
 }
