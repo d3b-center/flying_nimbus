@@ -180,7 +180,6 @@ type S3FilesViewModel struct {
 	contentHeight        int
 	bucketName           string
 	currentPath          []string
-	fileTree             *aws.S3FileTree
 }
 
 func InitS3FilesViewModel(appService *app.App, bucketName string, path []string, windowSize common.ContentWindowSizeMsg) S3FilesViewModel {
@@ -320,7 +319,6 @@ func (m S3FilesViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				listItems = append(listItems, subdirListItem{k, v})
 			}
 		}
-		m.fileTree = fileTree
 		m.list.SetItems(listItems)
 		m.updateLayout(m.windowSize)
 
