@@ -22,10 +22,22 @@ const (
 	ec2InstanceListWidthRatio = 0.25
 )
 const ec2InstanceListWidthRatio = 0.25
+type (
+	ec2InstancesLoadedMsg   []list.Item
+	instanceActionStatusMsg struct {
+		Err error
+	}
+	InstanceState string
+)
 
 var startStopInstance = key.NewBinding(
 	key.WithKeys("s"),
 	key.WithHelp("s", "Start/Stop Ec2"),
+)
+
+const (
+	StateRunning InstanceState = "running"
+	StateStopped InstanceState = "stopped"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -308,7 +320,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - BorderWidth
 	usableHeight := msg.Height - BorderHeight
 
-	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.contentHeight = usableHeight
@@ -416,9 +428,9 @@ func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
 		return nil
 	}
 
-	if instance.State == "running" {
+	if instance.State == string(StateRunning) {
 		return stopInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
-	} else if instance.State == "stopped" {
+	} else if instance.State == string(StateStopped) {
 		return startInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
 	}
 	return nil
