@@ -49,6 +49,20 @@ func TestGetSubtreeListItems(t *testing.T) {
 	if !ok {
 		t.Errorf("list item should be regularFileListItem, is not")
 	} else if item1.name != "file4" {
-		t.Errorf("name should be file4, got %q", item0.name)
+		t.Errorf("name should be file4, got %q", item1.name)
+	}
+
+	item3, ok := listItems[2].(subdirListItem)
+	if !ok {
+		t.Errorf("list item should be subdirListItem, is not")
+	} else if item3.name != "dir3" {
+		t.Errorf("name should be dir3, got %q", item3.name)
+	}
+
+	item4, ok := listItems[3].(subdirListItem)
+	if !ok {
+		t.Errorf("list item should be subdirListItem, is not")
+	} else if item4.name != "dir4" {
+		t.Errorf("name should be dir3, got %q", item4.name)
 	}
 }
