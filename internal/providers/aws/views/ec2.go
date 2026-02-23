@@ -28,7 +28,7 @@ const (
 	Ec2ActionStopInstance
 ) 
 
-type SsmSessionFinishedMsg struct{}
+type SsmSessionFinishedMsg struct{ err error}
 
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
@@ -46,7 +46,6 @@ type Ec2ViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	actionModel         ActionModel
 	isActionModalActive bool
-	returningFromSsm    bool
 }
 
 func ec2Actions() []ModalAction {
@@ -193,13 +192,14 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleEc2Action(action)
 
 	case ModalCancelMsg:
-		slog.Debug("Modal cancel msg")
 		m.isActionModalActive = false
 		return m, nil
 
 	case SsmSessionFinishedMsg:
 		m.isActionModalActive = false
-		m.returningFromSsm = true 
+		if msg.err != nil {
+			slog.Error("Error with SSM Session", "error", msg.err)
+		}
 		return m, tea.ClearScreen
 
 	case tea.KeyMsg:
@@ -310,16 +310,22 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 	m.detailViewport.GotoTop()
 }
 
+func (m *Ec2ViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	} 
+
+	if m.isActionModalActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
+}
+
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
-	if m.returningFromSsm {
-		m.returningFromSsm = false
-		if key.Matches(msg, constants.Keymap.ForceQuit) {
-			slog.Debug("Captured extra ctl+c")
-			return nil  // swallow stale ctl+c from SSM session
-		}
-	}
 
 	if m.isActionModalActive {
 		m.actionModel, cmd = m.actionModel.Update(msg)
@@ -338,7 +344,6 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	if key.Matches(msg, constants.Keymap.Enter) {
-		slog.Debug("Entering action modal")
 		m.isActionModalActive = true
 	}
 
@@ -352,46 +357,38 @@ func (m *Ec2ViewModel) handleEc2Action(action ModalAction) tea.Cmd {
 	switch ec2Action {
 	case Ec2ActionSSMShell:
 		slog.Info("Opening SSM Shell")
-		err := m.ssmShell()
-		if err != nil {
-			slog.Error("Error opening SSM shell", "error", err)
-		}
-		cmd = func() tea.Msg {
-			return SsmSessionFinishedMsg{}
-		}
+		cmd = m.ssmShell()
 	}
+	// Handle other modal actions here
 
 	return cmd
 }
 
-func (m Ec2ViewModel) ssmShell() error {
+func (m Ec2ViewModel) ssmShell() tea.Cmd {
+	var err error
 	if m.list.SelectedItem() == nil {
-		return fmt.Errorf("Failed to open SSM Shell: Selected item is nil")
+		err = fmt.Errorf("Failed to open SSM Shell: Selected item is nil")
 	}
 
 	selectedItem := m.list.SelectedItem()
 	instance, ok := selectedItem.(aws.Ec2Instance)
 	if !ok {
-		return fmt.Errorf("Failed to open SSM Shell: Selected item is not instance")
+		err = fmt.Errorf("Failed to open SSM Shell: Selected item is not instance")
 	}
 
 	if instance.State != "running" {
-		return fmt.Errorf("Selected instance is not running")
+		err = fmt.Errorf("Selected instance is not running")
+	}
+
+	if err != nil {
+		return func() tea.Msg {
+			return SsmSessionFinishedMsg{err}
+		}
 	}
 
 	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
-	return command.Run()
-}
-
-func (m *Ec2ViewModel) updateInputRouting() {
-	m.inputRoutingStrategy = common.RouteGlobalFirst
-
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} 
-
-	if m.isActionModalActive {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	}
+	return tea.ExecProcess(command, func(err error) tea.Msg {
+		return SsmSessionFinishedMsg{err}
+	})
+	
 }
