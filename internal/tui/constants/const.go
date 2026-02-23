@@ -13,7 +13,6 @@ type keymap struct {
 	Back       key.Binding
 	CursorUp   key.Binding
 	CursorDown key.Binding
-	ForceQuit key.Binding
 }
 
 // Keymap reusable key mappings shared across models
@@ -33,8 +32,5 @@ var Keymap = keymap{
 	CursorDown: key.NewBinding(
 		key.WithKeys("down", "j"),
 		key.WithHelp("↓/j", "down"),
-	),
-	ForceQuit: key.NewBinding(
-		key.WithKeys("ctrl+c"),
 	),
 }
