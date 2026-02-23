@@ -3,14 +3,13 @@ package aws
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
-	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
-
 
 // SsmService provides SSM session and port forwarding operations.
 type SsmService struct {
@@ -49,7 +48,6 @@ func InitSsmService(cfg aws.Config) *SsmService {
 		region: cfg.Region,
 	}
 }
-
 
 // BuildSessionCmd builds an exec.Cmd for an interactive SSM shell session.
 func (s *SsmService) BuildSessionCmd(instanceID string) *exec.Cmd {

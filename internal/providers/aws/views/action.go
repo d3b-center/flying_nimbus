@@ -2,42 +2,42 @@ package views
 
 import (
 	"flying_nimbus/internal/tui/common"
+	"flying_nimbus/internal/tui/constants"
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/bubbles/key"
-	"flying_nimbus/internal/tui/constants"
 	"log/slog"
 )
 
 var (
 	modalOverlayStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")).
-		Padding(1, 2)
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("62")).
+				Padding(1, 2)
 
 	modalTitleStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("62"))
+			Bold(true).
+			Foreground(lipgloss.Color("62"))
 
 	modalActiveStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("170")).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("170")).
-		Padding(0, 2)
+				Bold(true).
+				Foreground(lipgloss.Color("170")).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("170")).
+				Padding(0, 2)
 
 	modalInactiveStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("241")).
-		Padding(0, 2)
+				Foreground(lipgloss.Color("241")).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("241")).
+				Padding(0, 2)
 
 	modalHelpStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
+			Foreground(lipgloss.Color("241"))
 )
 
 type ModalAction struct {
-	Label string
+	Label  string
 	Action any // Implementer makes an enum of actions
 }
 
@@ -48,10 +48,10 @@ type ModalSelectMsg struct {
 type ModalCancelMsg struct{}
 
 type ActionModel struct {
-	title string
-	cursor int
+	title                string
+	cursor               int
 	inputRoutingStrategy common.InputRoutingStrategy
-	actions []ModalAction
+	actions              []ModalAction
 }
 
 func NewActionModal(title string, actions []ModalAction) ActionModel {
@@ -60,9 +60,9 @@ func NewActionModal(title string, actions []ModalAction) ActionModel {
 	}
 
 	return ActionModel{
-		title: title,
-		cursor: 0,
-		actions: actions,
+		title:                title,
+		cursor:               0,
+		actions:              actions,
 		inputRoutingStrategy: common.RouteFocusedFirst,
 	}
 }

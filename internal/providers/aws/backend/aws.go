@@ -42,7 +42,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		Rds:            rds,
 		Sg:             sg,
 		ServiceCatalog: serviceCatalog,
-		Ssm: ssm,
+		Ssm:            ssm,
 	}, nil
 
 }

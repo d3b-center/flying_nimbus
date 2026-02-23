@@ -19,6 +19,7 @@ import (
 )
 
 type Ec2Action int
+
 const (
 	ec2InstanceListWidthRatio = 0.25
 
@@ -26,26 +27,26 @@ const (
 	Ec2ActionSSMPortForward
 	Ec2ActionStartInstance
 	Ec2ActionStopInstance
-) 
+)
 
-type SsmSessionFinishedMsg struct{ err error}
+type SsmSessionFinishedMsg struct{ err error }
 
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
-	app                  *app.App
-	list                 list.Model
-	loader               spinner.Model
-	isLoading            bool
-	instanceDetail       string
-	isDetailViewportFocused       bool
-	detailViewport       viewport.Model
-	windowSize           common.ContentWindowSizeMsg
-	instanceListWidth    int
-	detailsWidth         int
-	contentHeight        int
-	inputRoutingStrategy common.InputRoutingStrategy
-	actionModel         ActionModel
-	isActionModalActive bool
+	app                     *app.App
+	list                    list.Model
+	loader                  spinner.Model
+	isLoading               bool
+	instanceDetail          string
+	isDetailViewportFocused bool
+	detailViewport          viewport.Model
+	windowSize              common.ContentWindowSizeMsg
+	instanceListWidth       int
+	detailsWidth            int
+	contentHeight           int
+	inputRoutingStrategy    common.InputRoutingStrategy
+	actionModel             ActionModel
+	isActionModalActive     bool
 }
 
 func ec2Actions() []ModalAction {
@@ -81,14 +82,14 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	am := NewActionModal("EC2 Actions", ec2Actions())
 
 	m := Ec2ViewModel{
-		app:            appService,
-		list:           l,
-		loader:         loader,
-		isLoading:      true,
+		app:                     appService,
+		list:                    l,
+		loader:                  loader,
+		isLoading:               true,
 		isDetailViewportFocused: false,
-		detailViewport: vp,
-		windowSize:     windowSize,
-		actionModel: am,
+		detailViewport:          vp,
+		windowSize:              windowSize,
+		actionModel:             am,
 	}
 	m.updateLayout(windowSize)
 
@@ -208,7 +209,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 			cmds = append(cmds, cmd)
 		}
-		
+
 		cmd := m.handleKeypress(msg)
 		cmds = append(cmds, cmd)
 	default:
@@ -223,7 +224,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.updateInputRouting()
-	
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -316,7 +317,7 @@ func (m *Ec2ViewModel) updateInputRouting() {
 	filterState := m.list.FilterState()
 	if filterState == list.Filtering {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} 
+	}
 
 	if m.isActionModalActive {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
@@ -390,5 +391,5 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	return tea.ExecProcess(command, func(err error) tea.Msg {
 		return SsmSessionFinishedMsg{err}
 	})
-	
+
 }
