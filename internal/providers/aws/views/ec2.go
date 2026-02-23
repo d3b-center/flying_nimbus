@@ -18,18 +18,14 @@ import (
 	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-type Ec2Action int
-
 const (
 	ec2InstanceListWidthRatio = 0.25
-
-	Ec2ActionSSMShell Ec2Action = iota
-	Ec2ActionSSMPortForward
-	Ec2ActionStartInstance
-	Ec2ActionStopInstance
 )
 
-type SsmSessionFinishedMsg struct{ err error }
+type (
+	ec2InstancesLoadedMsg []list.Item
+	SsmSessionFinishedMsg struct{ err error }
+)
 
 // Ec2ViewModel manages the EC2 instance list and details view.
 type Ec2ViewModel struct {
@@ -49,19 +45,6 @@ type Ec2ViewModel struct {
 	isActionModalActive     bool
 }
 
-func ec2Actions() []ModalAction {
-	return []ModalAction{
-		{Label: "Shell", Action: Ec2ActionSSMShell},
-		{Label: "Port Fwd", Action: Ec2ActionSSMPortForward},
-		{Label: "Start", Action: Ec2ActionStartInstance},
-		{Label: "Stop", Action: Ec2ActionStopInstance},
-	}
-}
-
-type (
-	ec2InstancesLoadedMsg []list.Item
-)
-
 // Creates a new EC2 view model
 func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) Ec2ViewModel {
 	slog.Debug("Initialize custom Ec2 view model")
@@ -79,8 +62,6 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 
 	vp := viewport.New(windowSize.Width, windowSize.Height)
 
-	am := NewActionModal("EC2 Actions", ec2Actions())
-
 	m := Ec2ViewModel{
 		app:                     appService,
 		list:                    l,
@@ -89,7 +70,6 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 		isDetailViewportFocused: false,
 		detailViewport:          vp,
 		windowSize:              windowSize,
-		actionModel:             am,
 	}
 	m.updateLayout(windowSize)
 
@@ -187,21 +167,16 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loader = newLoader
 		cmds = append(cmds, cmd)
 
-	case ModalSelectMsg:
-		m.isActionModalActive = false
-		action := msg.Action.(ModalAction)
-		return m, m.handleEc2Action(action)
-
 	case ModalCancelMsg:
 		m.isActionModalActive = false
 		return m, nil
 
-	case SsmSessionFinishedMsg:
+	case ModalResponseMsg:
 		m.isActionModalActive = false
 		if msg.err != nil {
-			slog.Error("Error with SSM Session", "error", msg.err)
+			slog.Error("Error with modal action", "error", msg.err)
 		}
-		return m, tea.ClearScreen
+		return m, nil
 
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
@@ -346,50 +321,47 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 
 	if key.Matches(msg, constants.Keymap.Enter) {
 		m.isActionModalActive = true
+		// Must generate actions on modal popup to get latest model since 
+		// Init, Update, and View cannot take pointer to model
+		m.buildActions()
 	}
 
 	return cmd
 }
 
-func (m *Ec2ViewModel) handleEc2Action(action ModalAction) tea.Cmd {
-	var cmd tea.Cmd
-	ec2Action := action.Action
 
-	switch ec2Action {
-	case Ec2ActionSSMShell:
-		slog.Info("Opening SSM Shell")
-		cmd = m.ssmShell()
-	}
-	// Handle other modal actions here
-
-	return cmd
+func (m *Ec2ViewModel) buildActions() {
+	m.actionModel = NewActionModal("EC2 Actions", []ModalAction{
+		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+	})
 }
 
 func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	var err error
+	errHeader := "Failed to open SSM Shell"
 	if m.list.SelectedItem() == nil {
-		err = fmt.Errorf("Failed to open SSM Shell: Selected item is nil")
+		err = fmt.Errorf("%s: Selected item is nil", errHeader)
 	}
 
 	selectedItem := m.list.SelectedItem()
 	instance, ok := selectedItem.(aws.Ec2Instance)
 	if !ok {
-		err = fmt.Errorf("Failed to open SSM Shell: Selected item is not instance")
+		err = fmt.Errorf("%s: Selected item is not instance", errHeader)
 	}
 
 	if instance.State != "running" {
-		err = fmt.Errorf("Selected instance is not running")
+		err = fmt.Errorf("%s: Selected instance is not running", errHeader)
 	}
 
 	if err != nil {
 		return func() tea.Msg {
-			return SsmSessionFinishedMsg{err}
+			return ModalResponseMsg{err}
 		}
 	}
 
 	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
 	return tea.ExecProcess(command, func(err error) tea.Msg {
-		return SsmSessionFinishedMsg{err}
+		return ModalResponseMsg{err}
 	})
 
 }

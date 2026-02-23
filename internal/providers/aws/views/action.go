@@ -1,7 +1,6 @@
 package views
 
 import (
-	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,19 +37,15 @@ var (
 
 type ModalAction struct {
 	Label  string
-	Action any // Implementer makes an enum of actions
-}
-
-type ModalSelectMsg struct {
-	Action any
+	Action func() tea.Cmd // Implementer supplies function to call
 }
 
 type ModalCancelMsg struct{}
+type ModalResponseMsg struct{ err error }
 
 type ActionModel struct {
 	title                string
 	cursor               int
-	inputRoutingStrategy common.InputRoutingStrategy
 	actions              []ModalAction
 }
 
@@ -63,22 +58,9 @@ func NewActionModal(title string, actions []ModalAction) ActionModel {
 		title:                title,
 		cursor:               0,
 		actions:              actions,
-		inputRoutingStrategy: common.RouteFocusedFirst,
 	}
 }
 
-func (m ActionModel) Commands() common.Commands {
-	return []key.Binding{
-		leftKey,
-		rightKey,
-		constants.Keymap.Enter,
-		constants.Keymap.Back,
-	}
-}
-
-func (m ActionModel) InputRoutingStrategy() common.InputRoutingStrategy {
-	return m.inputRoutingStrategy
-}
 
 func (m ActionModel) Init() tea.Cmd {
 	slog.Debug("Initializing action modal")
@@ -131,9 +113,7 @@ func (m *ActionModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	}
 	if key.Matches(msg, constants.Keymap.Enter) {
 		selected := m.actions[m.cursor]
-		cmd = func() tea.Msg {
-			return ModalSelectMsg{selected}
-		}
+		return selected.Action()
 	}
 	if key.Matches(msg, constants.Keymap.Back) {
 		cmd = func() tea.Msg {
