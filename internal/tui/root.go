@@ -18,7 +18,7 @@ import (
 const (
 	devConsoleRatio      = 0.25
 	minDevConsoleHeight  = 3
-	runtimeStatsInterval = 5 * time.Second
+	runtimeStatsInterval = 15 * time.Second
 	minHelpBarHeight     = 1
 	TitleBarInnerHeight  = 1
 	TitleBarBorderHeight = 2 // top + bottom

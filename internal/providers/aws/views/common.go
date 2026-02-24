@@ -1,7 +1,6 @@
 package views
 
 import (
-	"encoding/json"
 	"flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"fmt"
@@ -22,6 +21,14 @@ var (
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
 	)
+	leftKey key.Binding = key.NewBinding(
+		key.WithKeys("left", "h"),
+		key.WithHelp("left/h", "left"),
+	)
+	rightKey key.Binding = key.NewBinding(
+		key.WithKeys("right", "l"),
+		key.WithHelp("right/l", "right"),
+	)
 )
 
 const (
@@ -33,8 +40,6 @@ const (
 // GenerateTagRows takes tags and formats them for rendering
 func GenerateTagRows(tags map[string]string) []string {
 	var rows []string
-	debug, _ := json.Marshal(tags)
-	slog.Debug(string(debug))
 
 	if len(tags) == 0 {
 		slog.Debug("No tags found")
@@ -42,7 +47,6 @@ func GenerateTagRows(tags map[string]string) []string {
 	}
 
 	for key, value := range tags {
-		slog.Debug("Appending tag", "key", key, "value", value)
 		rows = append(rows, common.KV("  "+key, value))
 	}
 

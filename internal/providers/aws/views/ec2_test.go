@@ -72,16 +72,16 @@ func TestEc2UpdateLayout(t *testing.T) {
 func TestUpdate_FocusSwitching(t *testing.T) {
 	items := []list.Item{}
 	model := Ec2ViewModel{
-		detailsFocused: false,
-		list:           list.New(items, list.NewDefaultDelegate(), 0, 0),
+		isDetailViewportFocused: false,
+		list:                    list.New(items, list.NewDefaultDelegate(), 0, 0),
 	}
 
 	// Focus right
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m := updated.(Ec2ViewModel)
 
-	if !m.detailsFocused {
-		t.Error("expected detailsFocused to be true")
+	if !m.isDetailViewportFocused {
+		t.Error("expected isDetailViewportFocused to be true")
 	}
 
 	// Focus left
@@ -89,7 +89,7 @@ func TestUpdate_FocusSwitching(t *testing.T) {
 
 	m = updated.(Ec2ViewModel)
 
-	if m.detailsFocused {
-		t.Error("expected detailsFocused to be false")
+	if m.isDetailViewportFocused {
+		t.Error("expected isDetailViewportFocused to be false")
 	}
 }

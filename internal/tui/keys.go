@@ -22,10 +22,7 @@ type keymap struct {
 var DefaultKeymap = keymap{
 	Enter: constants.Keymap.Enter,
 
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "back"),
-	),
+	Back: constants.Keymap.Back,
 
 	// Toggle help.
 	ShowFullHelp: key.NewBinding(
@@ -61,7 +58,7 @@ func (m nimbusKeyMap) ShortHelp() []key.Binding {
 		constants.Keymap.CursorUp,
 		constants.Keymap.CursorDown,
 		m.Global.Enter,
-		m.Global.Back,
+		constants.Keymap.Back,
 		m.Global.ToggleDevConsole,
 		m.Global.ShowFullHelp,
 	}
@@ -75,7 +72,7 @@ func (m nimbusKeyMap) FullHelp() [][]key.Binding {
 		constants.Keymap.CursorUp,
 		constants.Keymap.CursorDown,
 		m.Global.Enter,
-		m.Global.Back,
+		constants.Keymap.Back,
 		m.Global.ToggleDevConsole,
 	}}
 	kb = append(kb, m.Dynamic)

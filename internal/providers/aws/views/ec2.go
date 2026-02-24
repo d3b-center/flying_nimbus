@@ -15,29 +15,35 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const ec2InstanceListWidthRatio = 0.25
-
-// Ec2ViewModel manages the EC2 instance list and details view.
-type Ec2ViewModel struct {
-	app                  *app.App
-	list                 list.Model
-	loader               spinner.Model
-	isLoading            bool
-	instanceDetail       string
-	detailsFocused       bool
-	detailViewport       viewport.Model
-	windowSize           common.ContentWindowSizeMsg
-	instanceListWidth    int
-	detailsWidth         int
-	contentHeight        int
-	inputRoutingStrategy common.InputRoutingStrategy
-}
+const (
+	ec2InstanceListWidthRatio = 0.25
+)
 
 type (
 	ec2InstancesLoadedMsg []list.Item
+	SsmSessionFinishedMsg struct{ err error }
 )
+
+// Ec2ViewModel manages the EC2 instance list and details view.
+type Ec2ViewModel struct {
+	app                     *app.App
+	list                    list.Model
+	loader                  spinner.Model
+	isLoading               bool
+	instanceDetail          string
+	isDetailViewportFocused bool
+	detailViewport          viewport.Model
+	windowSize              common.ContentWindowSizeMsg
+	instanceListWidth       int
+	detailsWidth            int
+	contentHeight           int
+	inputRoutingStrategy    common.InputRoutingStrategy
+	actionMenu              ActionMenu
+	isActionMenuActive      bool
+}
 
 // Creates a new EC2 view model
 func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) Ec2ViewModel {
@@ -57,13 +63,13 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	vp := viewport.New(windowSize.Width, windowSize.Height)
 
 	m := Ec2ViewModel{
-		app:            appService,
-		list:           l,
-		loader:         loader,
-		isLoading:      true,
-		detailsFocused: false,
-		detailViewport: vp,
-		windowSize:     windowSize,
+		app:                     appService,
+		list:                    l,
+		loader:                  loader,
+		isLoading:               true,
+		isDetailViewportFocused: false,
+		detailViewport:          vp,
+		windowSize:              windowSize,
 	}
 	m.updateLayout(windowSize)
 
@@ -108,7 +114,7 @@ func (m Ec2ViewModel) View() string {
 	detailStyle := common.InstanceDetailStyle.
 		MaxHeight(m.windowSize.Height)
 
-	if m.detailsFocused {
+	if m.isDetailViewportFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
 		listStyle = listStyle.BorderForeground(unfocusedColor)
 	} else {
@@ -120,8 +126,20 @@ func (m Ec2ViewModel) View() string {
 
 	left := listStyle.Render(m.list.View())
 	right := m.detailViewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	if m.isActionMenuActive {
+		return overlay.Composite(
+			m.actionMenu.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 // Update handles messages and updates the model state.
@@ -149,12 +167,24 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loader = newLoader
 		cmds = append(cmds, cmd)
 
+	case ModalCancelMsg:
+		m.isActionMenuActive = false
+		return m, nil
+
+	case ModalResponseMsg:
+		m.isActionMenuActive = false
+		if msg.err != nil {
+			slog.Error("Error with modal action", "error", msg.err)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
 			m.isLoading = true
-			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
+			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 			cmds = append(cmds, cmd)
 		}
+
 		cmd := m.handleKeypress(msg)
 		cmds = append(cmds, cmd)
 	default:
@@ -168,12 +198,8 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} else {
-		m.inputRoutingStrategy = common.RouteGlobalFirst
-	}
+	m.updateInputRouting()
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -260,18 +286,78 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 	m.detailViewport.GotoTop()
 }
 
+func (m *Ec2ViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering || m.isActionMenuActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
+}
+
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
-	if key.Matches(msg, toggleFocus) {
-		m.detailsFocused = !m.detailsFocused
+
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		m.isActionMenuActive = true
+		// Must generate actions on modal popup to get latest model since
+		// Init, Update, and View cannot take pointer to model
+		m.buildActions()
 		return nil
 	}
 
-	if m.detailsFocused {
+	if key.Matches(msg, toggleFocus) {
+		m.isDetailViewportFocused = !m.isDetailViewportFocused
+		return nil
+	}
+
+	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
+		return cmd
 	} else {
 		m.list, cmd = m.list.Update(msg)
+		return cmd
 	}
-	return cmd
+}
+
+func (m *Ec2ViewModel) buildActions() {
+	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
+		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+	})
+}
+
+func (m Ec2ViewModel) ssmShell() tea.Cmd {
+	var err error
+	errHeader := "Failed to open SSM Shell"
+	if m.list.SelectedItem() == nil {
+		err = fmt.Errorf("%s: Selected item is nil", errHeader)
+	}
+
+	selectedItem := m.list.SelectedItem()
+	instance, ok := selectedItem.(aws.Ec2Instance)
+	if !ok {
+		err = fmt.Errorf("%s: Selected item is not instance", errHeader)
+	}
+
+	if instance.State != "running" {
+		err = fmt.Errorf("%s: Selected instance is not running", errHeader)
+	}
+
+	if err != nil {
+		return func() tea.Msg {
+			return ModalResponseMsg{err}
+		}
+	}
+
+	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
+	return tea.ExecProcess(command, func(err error) tea.Msg {
+		return ModalResponseMsg{err}
+	})
+
 }
