@@ -41,8 +41,8 @@ type Ec2ViewModel struct {
 	detailsWidth            int
 	contentHeight           int
 	inputRoutingStrategy    common.InputRoutingStrategy
-	actionModel             ActionModel
-	isActionModalActive     bool
+	actionMenu              ActionMenu
+	isActionMenuActive      bool
 }
 
 // Creates a new EC2 view model
@@ -128,9 +128,9 @@ func (m Ec2ViewModel) View() string {
 	right := m.detailViewport.View()
 	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	if m.isActionModalActive {
+	if m.isActionMenuActive {
 		return overlay.Composite(
-			m.actionModel.View(),
+			m.actionMenu.View(),
 			instances,
 			overlay.Center,
 			overlay.Center,
@@ -168,11 +168,11 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case ModalCancelMsg:
-		m.isActionModalActive = false
+		m.isActionMenuActive = false
 		return m, nil
 
 	case ModalResponseMsg:
-		m.isActionModalActive = false
+		m.isActionMenuActive = false
 		if msg.err != nil {
 			slog.Error("Error with modal action", "error", msg.err)
 		}
@@ -290,11 +290,7 @@ func (m *Ec2ViewModel) updateInputRouting() {
 	m.inputRoutingStrategy = common.RouteGlobalFirst
 
 	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	}
-
-	if m.isActionModalActive {
+	if filterState == list.Filtering || m.isActionMenuActive {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	}
 }
@@ -303,9 +299,17 @@ func (m *Ec2ViewModel) updateInputRouting() {
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
 
-	if m.isActionModalActive {
-		m.actionModel, cmd = m.actionModel.Update(msg)
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
 		return cmd
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		m.isActionMenuActive = true
+		// Must generate actions on modal popup to get latest model since
+		// Init, Update, and View cannot take pointer to model
+		m.buildActions()
+		return nil
 	}
 
 	if key.Matches(msg, toggleFocus) {
@@ -315,23 +319,15 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 
 	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
+		return cmd
 	} else {
 		m.list, cmd = m.list.Update(msg)
+		return cmd
 	}
-
-	if key.Matches(msg, constants.Keymap.Enter) {
-		m.isActionModalActive = true
-		// Must generate actions on modal popup to get latest model since 
-		// Init, Update, and View cannot take pointer to model
-		m.buildActions()
-	}
-
-	return cmd
 }
 
-
 func (m *Ec2ViewModel) buildActions() {
-	m.actionModel = NewActionModal("EC2 Actions", []ModalAction{
+	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
 		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
 	})
 }
