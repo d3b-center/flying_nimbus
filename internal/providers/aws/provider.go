@@ -87,8 +87,7 @@ func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSiz
 			"Service Catalog",
 			"Service Catalog",
 			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
-				// NewAWSProviderModel Please Remove (dummy model)
-				return NewAWSProviderModel(appService, windowSize)
+				return views.InitServiceCatalogViewModel(appService, windowSize)
 			},
 		),
 	}

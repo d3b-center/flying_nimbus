@@ -15,35 +15,35 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const ec2InstanceListWidthRatio = 0.25
-
-// Ec2ViewModel manages the EC2 instance list and details view.
-type Ec2ViewModel struct {
-	app                  *app.App
-	list                 list.Model
-	loader               spinner.Model
-	isLoading            bool
-	instanceDetail       string
-	detailsFocused       bool
-	detailViewport       viewport.Model
-	windowSize           common.ContentWindowSizeMsg
-	ready                bool
-	instanceListWidth    int
-	detailsWidth         int
-	contentHeight        int
-	inputRoutingStrategy common.InputRoutingStrategy
-}
+const (
+	ec2InstanceListWidthRatio = 0.25
+)
 
 type (
 	ec2InstancesLoadedMsg []list.Item
+	SsmSessionFinishedMsg struct{ err error }
 )
 
-var (
-	focusedColor   = lipgloss.Color("62")
-	unfocusedColor = lipgloss.Color("240")
-)
+// Ec2ViewModel manages the EC2 instance list and details view.
+type Ec2ViewModel struct {
+	app                     *app.App
+	list                    list.Model
+	loader                  spinner.Model
+	isLoading               bool
+	instanceDetail          string
+	isDetailViewportFocused bool
+	detailViewport          viewport.Model
+	windowSize              common.ContentWindowSizeMsg
+	instanceListWidth       int
+	detailsWidth            int
+	contentHeight           int
+	inputRoutingStrategy    common.InputRoutingStrategy
+	actionMenu              ActionMenu
+	isActionMenuActive      bool
+}
 
 // Creates a new EC2 view model
 func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) Ec2ViewModel {
@@ -60,16 +60,16 @@ func InitEc2ViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Points
 
-	vp := viewport.New(0, 0)
+	vp := viewport.New(windowSize.Width, windowSize.Height)
 
 	m := Ec2ViewModel{
-		app:            appService,
-		list:           l,
-		loader:         loader,
-		isLoading:      true,
-		detailsFocused: false,
-		detailViewport: vp,
-		windowSize:     windowSize,
+		app:                     appService,
+		list:                    l,
+		loader:                  loader,
+		isLoading:               true,
+		isDetailViewportFocused: false,
+		detailViewport:          vp,
+		windowSize:              windowSize,
 	}
 	m.updateLayout(windowSize)
 
@@ -89,7 +89,7 @@ func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return make([]key.Binding, 0)
+	return []key.Binding{toggleFocus}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -109,12 +109,12 @@ func (m Ec2ViewModel) View() string {
 	}
 
 	listStyle := common.InstancesListStyle.
-		MaxHeight(m.contentHeight)
+		MaxHeight(m.windowSize.Height)
 
 	detailStyle := common.InstanceDetailStyle.
-		MaxHeight(m.contentHeight)
+		MaxHeight(m.windowSize.Height)
 
-	if m.detailsFocused {
+	if m.isDetailViewportFocused {
 		detailStyle = detailStyle.BorderForeground(focusedColor)
 		listStyle = listStyle.BorderForeground(unfocusedColor)
 	} else {
@@ -122,17 +122,30 @@ func (m Ec2ViewModel) View() string {
 		detailStyle = detailStyle.BorderForeground(unfocusedColor)
 	}
 
-	left := listStyle.Render(m.list.View())
-	right := detailStyle.Render(m.detailViewport.View())
+	m.detailViewport.Style = detailStyle
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	left := listStyle.Render(m.list.View())
+	right := m.detailViewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+
+	if m.isActionMenuActive {
+		return overlay.Composite(
+			m.actionMenu.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 // Update handles messages and updates the model state.
 func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	prevIndex := m.list.Index()
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
@@ -150,12 +163,34 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		m.loader, cmd = m.loader.Update(msg)
-		return m, cmd
+		newLoader, cmd := m.loader.Update(msg)
+		m.loader = newLoader
+		cmds = append(cmds, cmd)
+
+	case ModalCancelMsg:
+		m.isActionMenuActive = false
+		return m, nil
+
+	case ModalResponseMsg:
+		m.isActionMenuActive = false
+		if msg.err != nil {
+			slog.Error("Error with modal action", "error", msg.err)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
-		cmd = m.handleKeypress(msg)
+		if key.Matches(msg, forceRefresh) {
+			m.isLoading = true
+			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+			cmds = append(cmds, cmd)
+		}
+
+		cmd := m.handleKeypress(msg)
+		cmds = append(cmds, cmd)
 	default:
-		m.list, cmd = m.list.Update(msg)
+		newList, cmd := m.list.Update(msg)
+		m.list = newList
+		cmds = append(cmds, cmd)
 	}
 
 	if m.list.Index() != prevIndex {
@@ -163,13 +198,9 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} else {
-		m.inputRoutingStrategy = common.RouteGlobalFirst
-	}
-	return m, cmd
+	m.updateInputRouting()
+
+	return m, tea.Batch(cmds...)
 }
 
 // ec2InstancesToItems converts EC2 instances to list items.
@@ -230,17 +261,6 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// resizeViewport updates the viewport dimensions.
-func (m *Ec2ViewModel) resizeViewport(width int, height int) {
-	if !m.ready {
-		m.detailViewport = viewport.New(width, height)
-		m.ready = true
-	} else {
-		m.detailViewport.Width = width
-		m.detailViewport.Height = height
-	}
-}
-
 // updateLayout recalculates and applies layout dimensions.
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
@@ -253,17 +273,10 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 
 	m.contentHeight = usableHeight
 
-	if !m.ready {
-		m.detailViewport = viewport.New(m.instanceListWidth, m.contentHeight)
-		m.ready = true
-	} else {
-		m.detailViewport.Width = m.detailsWidth
-		m.detailViewport.Height = m.contentHeight
-		m.resizeViewport(m.detailViewport.Width, m.detailViewport.Height)
-	}
+	m.detailViewport.Width = m.detailsWidth
+	m.detailViewport.Height = msg.Height
 
 	m.list.SetSize(m.instanceListWidth, usableHeight)
-	m.detailViewport.SetContent(m.instanceDetail)
 }
 
 // updateInstanceDetails regenerates and displays instance details.
@@ -273,28 +286,78 @@ func (m *Ec2ViewModel) updateInstanceDetails() {
 	m.detailViewport.GotoTop()
 }
 
+func (m *Ec2ViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering || m.isActionMenuActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
+}
+
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
-	switch msg.String() {
-	case "right":
-		slog.Debug("Focus on details view")
-		m.detailsFocused = true
-	case "left":
-		slog.Debug("Focus on instances list")
-		m.detailsFocused = false
-	case "down":
-		if m.detailsFocused {
-			m.detailViewport.PageDown()
-		} else {
-			m.list, cmd = m.list.Update(msg)
-		}
-	case "up":
-		if m.detailsFocused {
-			m.detailViewport.PageUp()
-		} else {
-			m.list, cmd = m.list.Update(msg)
+
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		m.isActionMenuActive = true
+		// Must generate actions on modal popup to get latest model since
+		// Init, Update, and View cannot take pointer to model
+		m.buildActions()
+		return nil
+	}
+
+	if key.Matches(msg, toggleFocus) {
+		m.isDetailViewportFocused = !m.isDetailViewportFocused
+		return nil
+	}
+
+	if m.isDetailViewportFocused {
+		m.detailViewport, cmd = m.detailViewport.Update(msg)
+		return cmd
+	} else {
+		m.list, cmd = m.list.Update(msg)
+		return cmd
+	}
+}
+
+func (m *Ec2ViewModel) buildActions() {
+	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
+		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+	})
+}
+
+func (m Ec2ViewModel) ssmShell() tea.Cmd {
+	var err error
+	errHeader := "Failed to open SSM Shell"
+	if m.list.SelectedItem() == nil {
+		err = fmt.Errorf("%s: Selected item is nil", errHeader)
+	}
+
+	selectedItem := m.list.SelectedItem()
+	instance, ok := selectedItem.(aws.Ec2Instance)
+	if !ok {
+		err = fmt.Errorf("%s: Selected item is not instance", errHeader)
+	}
+
+	if instance.State != "running" {
+		err = fmt.Errorf("%s: Selected instance is not running", errHeader)
+	}
+
+	if err != nil {
+		return func() tea.Msg {
+			return ModalResponseMsg{err}
 		}
 	}
-	return cmd
+
+	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
+	return tea.ExecProcess(command, func(err error) tea.Msg {
+		return ModalResponseMsg{err}
+	})
+
 }
