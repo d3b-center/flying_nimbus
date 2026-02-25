@@ -12,8 +12,11 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
+	"github.com/muesli/reflow/wrap"
 )
 
 var (
@@ -28,12 +31,6 @@ var (
 				Padding(0, 1)
 )
 
-const (
-	BorderHeight           = 2 // top + bottom
-	BorderWidth            = 4
-	instanceListWidthRatio = 0.25
-)
-
 // RdsViewModel is the Bubble Tea model for displaying RDS instances and their details.
 type RdsViewModel struct {
 	app                  *app.App
@@ -45,6 +42,8 @@ type RdsViewModel struct {
 	detailsWidth         int
 	sgs                  map[string]*aws.SecurityGroup
 	inputRoutingStrategy common.InputRoutingStrategy
+	viewport             viewport.Model
+	isViewportFocused    bool
 }
 
 func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -56,7 +55,7 @@ func (m RdsViewModel) Title() string {
 }
 
 func (m RdsViewModel) Commands() common.Commands {
-	return make([]key.Binding, 0)
+	return []key.Binding{forceRefresh, toggleFocus}
 }
 
 // Messages returned from async commands.
@@ -78,12 +77,16 @@ func InitRdsViewModel(appService *app.App, windowSize common.ContentWindowSizeMs
 	loader.Style = common.SpinnerStyle
 	loader.Spinner = spinner.Dot
 
+	v := viewport.New(windowSize.Width, windowSize.Height)
+
 	m := RdsViewModel{
 		app:                  appService,
 		loader:               loader,
 		list:                 l,
 		isLoading:            true,
 		inputRoutingStrategy: common.RouteGlobalFirst,
+		viewport:             v,
+		isViewportFocused:    false,
 	}
 	slog.Debug(fmt.Sprintf("Window Size Init %v", windowSize))
 	m.updateLayout(windowSize)
@@ -119,15 +122,29 @@ func (m RdsViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	slog.Debug(fmt.Sprintf("Window Size View %v", m.windowSize))
+	if m.isViewportFocused {
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(focusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(unfocusedColor)
+	} else {
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(unfocusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(focusedColor)
+	}
+
+	instanceDetailStyle.MaxHeight(m.windowSize.Height)
+
 	left := instancesListStyle.MaxHeight(m.windowSize.Height).Render(m.list.View())
-	right := instanceDetailStyle.MaxHeight(m.windowSize.Height).Render(generateRdsInstanceDetail(m.list.SelectedItem(), m.sgs))
+
+	m.viewport.Style = instanceDetailStyle
+	right := m.viewport.View()
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+
+	prevIndex := m.list.Index()
+
+	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case common.ContentWindowSizeMsg:
 		m.windowSize = msg
@@ -136,17 +153,37 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case rdsInstancesLoadedMsg:
 		m.list.SetItems(msg)
 		slog.Debug(fmt.Sprintf("📥 Rcv'd Rds Instances... # of Rds' %d", len(m.list.Items())))
-		cmd = fetchSecurityGroupsCmd(m.app.Context, m.app.AWS.Sg, gatherSecurityGroupIds(msg))
+		cmd := fetchSecurityGroupsCmd(m.app.Context, m.app.AWS.Sg, gatherSecurityGroupIds(msg))
+		cmds = append(cmds, cmd)
 
 	case securityGroupsLoadedMsg:
 		slog.Debug(fmt.Sprintf("📥 Rcv'd SG Details' %d", len(msg)))
 		m.isLoading = false
 		m.sgs = msg
+		m.updateInstanceDetails()
+
+	case tea.KeyMsg:
+		if key.Matches(msg, forceRefresh) {
+			m.isLoading = true
+			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
+			cmds = append(cmds, cmd)
+		}
+		cmd := m.handleKeyMsg(msg)
+		cmds = append(cmds, cmd)
 
 	case spinner.TickMsg:
-		m.loader, cmd = m.loader.Update(msg)
+		newLoader, cmd := m.loader.Update(msg)
+		m.loader = newLoader
+		cmds = append(cmds, cmd)
 	default:
-		m.list, cmd = m.list.Update(msg)
+		newList, cmd := m.list.Update(msg)
+		m.list = newList
+		cmds = append(cmds, cmd)
+	}
+
+	if m.list.Index() != prevIndex {
+		slog.Debug("Selection changed, regenerating detail", "index", m.list.Index())
+		m.updateInstanceDetails()
 	}
 
 	filterState := m.list.FilterState()
@@ -155,7 +192,34 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst
 	}
-	return m, cmd
+	return m, tea.Batch(cmds...)
+}
+
+func (m *RdsViewModel) updateInstanceDetails() {
+
+	if m.isLoading {
+		return
+	}
+	m.viewport.SetContent(generateRdsInstanceDetail(m.detailsWidth, m.list.SelectedItem(), m.sgs))
+	m.viewport.GotoTop()
+}
+
+func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
+
+	var cmd tea.Cmd
+
+	if key.Matches(msg, toggleFocus) {
+		m.isViewportFocused = !m.isViewportFocused
+		return nil
+	}
+
+	if m.isViewportFocused {
+		m.viewport, cmd = m.viewport.Update(msg)
+	} else {
+		m.list, cmd = m.list.Update(msg)
+	}
+
+	return cmd
 }
 
 // updateLayout recalculates pane widths based on the current window size.
@@ -169,6 +233,9 @@ func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.list.SetSize(m.instanceListWidth, usableHeight)
+
+	m.viewport.Height = m.windowSize.Height
+	m.viewport.Width = m.detailsWidth
 }
 
 // dbInstancesToItems converts a slice of RDS instances to list.Items.
@@ -205,7 +272,7 @@ func gatherSecurityGroupIds(items []list.Item) []string {
 }
 
 // generateRdsInstanceDetail generates the detail panel for a selected RDS instance.
-func generateRdsInstanceDetail(selectedItem list.Item, sgs map[string]*aws.SecurityGroup) string {
+func generateRdsInstanceDetail(width int, selectedItem list.Item, sgs map[string]*aws.SecurityGroup) string {
 	// Skeleton detail sections
 	if selectedItem == nil {
 		return "No Info"
@@ -241,7 +308,7 @@ func generateRdsInstanceDetail(selectedItem list.Item, sgs map[string]*aws.Secur
 
 	rows = append(rows, securityGroupRulesSection(rds.SecurityGroupIds, sgs, common.SectionHeaderStyle)...)
 
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	return wrap.String(wordwrap.String(lipgloss.JoinVertical(lipgloss.Left, rows...), width), width)
 }
 
 func formatSubnetIds(subnetIds []string) []string {

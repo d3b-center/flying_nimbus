@@ -49,26 +49,6 @@ func TestGenerateEc2InstanceDetail_Nil(t *testing.T) {
 	}
 }
 
-func TestResizeViewport(t *testing.T) {
-	model := &Ec2ViewModel{
-		ready: false,
-	}
-
-	model.resizeViewport(800, 600)
-
-	if !model.ready {
-		t.Error("expected ready to be true after resize")
-	}
-
-	if model.detailViewport.Width != 800 {
-		t.Errorf("expected width 800, got %d", model.detailViewport.Width)
-	}
-
-	if model.detailViewport.Height != 600 {
-		t.Errorf("expected height 600, got %d", model.detailViewport.Height)
-	}
-}
-
 func TestEc2UpdateLayout(t *testing.T) {
 	model := &Ec2ViewModel{}
 
@@ -90,23 +70,26 @@ func TestEc2UpdateLayout(t *testing.T) {
 }
 
 func TestUpdate_FocusSwitching(t *testing.T) {
+	items := []list.Item{}
 	model := Ec2ViewModel{
-		detailsFocused: false,
+		isDetailViewportFocused: false,
+		list:                    list.New(items, list.NewDefaultDelegate(), 0, 0),
 	}
 
 	// Focus right
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m := updated.(Ec2ViewModel)
 
-	if !m.detailsFocused {
-		t.Error("expected detailsFocused to be true")
+	if !m.isDetailViewportFocused {
+		t.Error("expected isDetailViewportFocused to be true")
 	}
 
 	// Focus left
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
 	m = updated.(Ec2ViewModel)
 
-	if m.detailsFocused {
-		t.Error("expected detailsFocused to be false")
+	if m.isDetailViewportFocused {
+		t.Error("expected isDetailViewportFocused to be false")
 	}
 }
