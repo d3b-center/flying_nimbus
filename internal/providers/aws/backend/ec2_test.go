@@ -40,6 +40,22 @@ func (m *mockEc2API) DescribeVolumes(
 	return m.volumesOutput, nil
 }
 
+func (m *mockEc2API) StartInstances(
+	ctx context.Context,
+	params *ec2.StartInstancesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.StartInstancesOutput, error) {
+	return nil, nil
+}
+
+func (m *mockEc2API) StopInstances(
+	ctx context.Context,
+	params *ec2.StopInstancesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.StopInstancesOutput, error) {
+	return nil, nil
+}
+
 func TestEc2Instance_ListItemInterface(t *testing.T) {
 	inst := Ec2Instance{
 		InstanceID: "i-12345",

@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -38,6 +39,8 @@ type EbsVolume struct {
 type ec2API interface {
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFuncs ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeVolumes(ctx context.Context, params *ec2.DescribeVolumesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error)
+	StartInstances(ctx context.Context, params *ec2.StartInstancesInput, optFns ...func(*ec2.Options)) (*ec2.StartInstancesOutput, error)
+	StopInstances(ctx context.Context, params *ec2.StopInstancesInput, optFns ...func(*ec2.Options)) (*ec2.StopInstancesOutput, error)
 }
 
 // Ec2Service provides methods for interacting with EC2 instances.
@@ -225,4 +228,44 @@ func extractInstanceState(state *types.InstanceState) string {
 		return string(state.Name)
 	}
 	return ""
+}
+
+// StartInstances starts the given EC2 instances. No-op if instanceIDs is empty.
+func (e *Ec2Service) StartInstances(ctx context.Context, instanceIDs []string) error {
+	if len(instanceIDs) == 0 {
+		return nil
+	}
+	if e == nil || e.api == nil {
+		return fmt.Errorf("EC2 client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ids := make([]string, len(instanceIDs))
+	copy(ids, instanceIDs)
+	_, err := e.api.StartInstances(ctx, &ec2.StartInstancesInput{InstanceIds: ids})
+	if err != nil {
+		return fmt.Errorf("start instances: %w", err)
+	}
+	return nil
+}
+
+// StopInstances stops the given EC2 instances. No-op if instanceIDs is empty.
+func (e *Ec2Service) StopInstances(ctx context.Context, instanceIDs []string) error {
+	if len(instanceIDs) == 0 {
+		return nil
+	}
+	if e == nil || e.api == nil {
+		return fmt.Errorf("EC2 client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ids := make([]string, len(instanceIDs))
+	copy(ids, instanceIDs)
+	_, err := e.api.StopInstances(ctx, &ec2.StopInstancesInput{InstanceIds: ids})
+	if err != nil {
+		return fmt.Errorf("stop instances: %w", err)
+	}
+	return nil
 }

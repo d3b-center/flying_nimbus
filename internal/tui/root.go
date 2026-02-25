@@ -91,7 +91,11 @@ func renderTitleBar(m tea.Model, width int) string {
 	if !ok {
 		return ""
 	}
-	title := fmt.Sprintf(" ☁️ Flying Nimbus - %s", nimbus.Title())
+	// Ensure non-zero width so the header is visible before first WindowSizeMsg or when sizing is stale
+	if width <= 0 {
+		width = 80
+	}
+	title := fmt.Sprintf(" ☁️  Flying Nimbus - %s", nimbus.Title())
 
 	left := lipgloss.NewStyle().
 		Bold(true).
