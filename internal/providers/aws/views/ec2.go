@@ -407,7 +407,7 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	})
 
 }
-
+// ActionMenu callback
 func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 	slog.Debug("SSM Port Forward chosen")
 	slog.Debug("Active bools", "form", m.isInputFormActive, "menu", m.isActionMenuActive)
@@ -427,6 +427,7 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []components.InputField {
 		}
 }
 
+// InputForm callback
 func (m Ec2ViewModel) ssmPortForwardOnSubmit(values components.InputFormResult) tea.Cmd {
 	slog.Debug("OnSubmit function running")
 	localPort, _ := aws.ValidatePort(values["Local Port"])
