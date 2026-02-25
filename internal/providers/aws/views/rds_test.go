@@ -38,7 +38,7 @@ func TestUpdateLayout(t *testing.T) {
 
 	model.updateLayout(msg)
 
-	expectedListWidth := int(float64(100-BorderWidth) * instanceListWidthRatio)
+	expectedListWidth := int(float64(100-components.BorderWidth) * components.InstanceListWidthRatio)
 
 	if model.instanceListWidth != expectedListWidth && model.list.Width() != expectedListWidth {
 		t.Errorf("expected %d, got %d", expectedListWidth, model.instanceListWidth)

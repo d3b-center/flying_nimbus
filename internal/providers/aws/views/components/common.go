@@ -1,4 +1,4 @@
-package views
+package components
 
 import (
 	"flying_nimbus/internal/providers/aws/backend"
@@ -11,21 +11,21 @@ import (
 )
 
 var (
-	focusedColor   = lipgloss.Color("62")
-	unfocusedColor = lipgloss.Color("240")
-	forceRefresh   = key.NewBinding(
+	FocusedColor   = lipgloss.Color("62")
+	UnfocusedColor = lipgloss.Color("240")
+	ForceRefresh   = key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "refresh RDSs"),
 	)
-	toggleFocus = key.NewBinding(
+	ToggleFocus = key.NewBinding(
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
 	)
-	leftKey key.Binding = key.NewBinding(
+	LeftKey key.Binding = key.NewBinding(
 		key.WithKeys("left", "h"),
 		key.WithHelp("left/h", "left"),
 	)
-	rightKey key.Binding = key.NewBinding(
+	RightKey key.Binding = key.NewBinding(
 		key.WithKeys("right", "l"),
 		key.WithHelp("right/l", "right"),
 	)
@@ -34,7 +34,7 @@ var (
 const (
 	BorderHeight           = 2 // top + bottom
 	BorderWidth            = 4
-	instanceListWidthRatio = 0.25
+	InstanceListWidthRatio = 0.25
 )
 
 // GenerateTagRows takes tags and formats them for rendering

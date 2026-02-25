@@ -6,6 +6,7 @@ import (
 	aws "flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
+	"flying_nimbus/internal/providers/aws/views/components"
 	"fmt"
 	"log/slog"
 
@@ -55,7 +56,7 @@ func (m RdsViewModel) Title() string {
 }
 
 func (m RdsViewModel) Commands() common.Commands {
-	return []key.Binding{forceRefresh, toggleFocus}
+	return []key.Binding{components.ForceRefresh, components.ToggleFocus}
 }
 
 // Messages returned from async commands.
@@ -123,11 +124,11 @@ func (m RdsViewModel) View() string {
 	}
 
 	if m.isViewportFocused {
-		instanceDetailStyle = instanceDetailStyle.BorderForeground(focusedColor)
-		instancesListStyle = instancesListStyle.BorderForeground(unfocusedColor)
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(components.FocusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(components.UnfocusedColor)
 	} else {
-		instanceDetailStyle = instanceDetailStyle.BorderForeground(unfocusedColor)
-		instancesListStyle = instancesListStyle.BorderForeground(focusedColor)
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(components.UnfocusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(components.FocusedColor)
 	}
 
 	instanceDetailStyle.MaxHeight(m.windowSize.Height)
@@ -163,7 +164,7 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 
 	case tea.KeyMsg:
-		if key.Matches(msg, forceRefresh) {
+		if key.Matches(msg, components.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
 			cmds = append(cmds, cmd)
@@ -208,7 +209,7 @@ func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 	var cmd tea.Cmd
 
-	if key.Matches(msg, toggleFocus) {
+	if key.Matches(msg, components.ToggleFocus) {
 		m.isViewportFocused = !m.isViewportFocused
 		return nil
 	}
@@ -226,10 +227,10 @@ func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	usableHeight := m.windowSize.Height - BorderHeight
-	usableWidth := m.windowSize.Width - BorderWidth
+	usableHeight := m.windowSize.Height - components.BorderHeight
+	usableWidth := m.windowSize.Width - components.BorderWidth
 
-	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * components.InstanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.list.SetSize(m.instanceListWidth, usableHeight)

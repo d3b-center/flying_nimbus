@@ -4,6 +4,7 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	"flying_nimbus/internal/providers/aws/backend"
+	"flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
@@ -41,8 +42,10 @@ type Ec2ViewModel struct {
 	detailsWidth            int
 	contentHeight           int
 	inputRoutingStrategy    common.InputRoutingStrategy
-	actionMenu              ActionMenu
+	actionMenu              components.ActionMenu
 	isActionMenuActive      bool
+	inputForm 				components.InputForm
+	isInputFormActive 		bool
 }
 
 // Creates a new EC2 view model
@@ -89,7 +92,7 @@ func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return []key.Binding{toggleFocus}
+	return []key.Binding{components.ToggleFocus}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -115,11 +118,11 @@ func (m Ec2ViewModel) View() string {
 		MaxHeight(m.windowSize.Height)
 
 	if m.isDetailViewportFocused {
-		detailStyle = detailStyle.BorderForeground(focusedColor)
-		listStyle = listStyle.BorderForeground(unfocusedColor)
+		detailStyle = detailStyle.BorderForeground(components.FocusedColor)
+		listStyle = listStyle.BorderForeground(components.UnfocusedColor)
 	} else {
-		listStyle = listStyle.BorderForeground(focusedColor)
-		detailStyle = detailStyle.BorderForeground(unfocusedColor)
+		listStyle = listStyle.BorderForeground(components.FocusedColor)
+		detailStyle = detailStyle.BorderForeground(components.UnfocusedColor)
 	}
 
 	m.detailViewport.Style = detailStyle
@@ -128,9 +131,25 @@ func (m Ec2ViewModel) View() string {
 	right := m.detailViewport.View()
 	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
+	return m.handleOverlays(instances)
+}
+
+// Handle any modals over the instance list
+func (m Ec2ViewModel) handleOverlays(instances string) string {
 	if m.isActionMenuActive {
 		return overlay.Composite(
 			m.actionMenu.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	if m.isInputFormActive {
+		return overlay.Composite(
+			m.inputForm.View(),
 			instances,
 			overlay.Center,
 			overlay.Center,
@@ -167,19 +186,32 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loader = newLoader
 		cmds = append(cmds, cmd)
 
-	case ModalCancelMsg:
+	case components.ModalCancelMsg:
 		m.isActionMenuActive = false
 		return m, nil
 
-	case ModalResponseMsg:
+	case components.ModalResponseMsg:
 		m.isActionMenuActive = false
-		if msg.err != nil {
-			slog.Error("Error with modal action", "error", msg.err)
+		if msg.Err != nil {
+			slog.Error("Error with modal action", "error", msg.Err)
 		}
 		return m, nil
 
+	case components.InputFormOpenMsg:
+		m.isInputFormActive = true
+		m.isActionMenuActive = false
+		return m, nil
+
+	case components.InputFormSubmitMsg:
+		m.isInputFormActive = false
+		return m, msg.OnSubmit(msg.Values)
+
+	case components.InputFormCancelMsg:
+		m.isInputFormActive = false
+		return m, nil
+
 	case tea.KeyMsg:
-		if key.Matches(msg, forceRefresh) {
+		if key.Matches(msg, components.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 			cmds = append(cmds, cmd)
@@ -253,10 +285,10 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
-	rows = append(rows, GenerateEbsVolumeRows(instance.Volumes)...)
+	rows = append(rows, components.GenerateEbsVolumeRows(instance.Volumes)...)
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
-	rows = append(rows, GenerateTagRows(instance.Tags)...)
+	rows = append(rows, components.GenerateTagRows(instance.Tags)...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
@@ -265,8 +297,8 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	usableWidth := msg.Width - BorderWidth
-	usableHeight := msg.Height - BorderHeight
+	usableWidth := msg.Width - components.BorderWidth
+	usableHeight := msg.Height - components.BorderHeight
 
 	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
@@ -298,6 +330,10 @@ func (m *Ec2ViewModel) updateInputRouting() {
 // handleKeypress processes keyboard input.
 func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
+	if m.isInputFormActive {
+		m.inputForm, cmd = m.inputForm.Update(msg)
+		return cmd
+	}
 
 	if m.isActionMenuActive {
 		m.actionMenu, cmd = m.actionMenu.Update(msg)
@@ -312,7 +348,7 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if key.Matches(msg, toggleFocus) {
+	if key.Matches(msg, components.ToggleFocus) {
 		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		return nil
 	}
@@ -327,8 +363,9 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Ec2ViewModel) buildActions() {
-	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
-		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+	m.actionMenu = components.NewActionModal("EC2 Actions", []components.ActionItem{
+		{Label: "Shell", Action: m.ssmShell},
+		{Label: "Port Forward", Action: m.ssmPortForward},
 	})
 }
 
@@ -351,13 +388,57 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 
 	if err != nil {
 		return func() tea.Msg {
-			return ModalResponseMsg{err}
+			return components.ModalResponseMsg{err}
 		}
 	}
 
 	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
 	return tea.ExecProcess(command, func(err error) tea.Msg {
-		return ModalResponseMsg{err}
+		return components.ModalResponseMsg{err}
 	})
 
+}
+
+func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
+	slog.Debug("SSM Port Forward chosen")
+	slog.Debug("Active bools", "form", m.isInputFormActive, "menu", m.isActionMenuActive)
+	instance := m.list.SelectedItem().(aws.Ec2Instance)
+
+	m.inputForm = components.NewInputForm(
+		fmt.Sprintf("Port Forward: %s", instance.Name),
+		m.ssmPortForwardInputs(),
+		m.ssmPortForwardOnSubmit,
+	)
+
+	slog.Debug("Input Form attributes", "title", m.inputForm.Title, "label", len(m.inputForm.Labels))
+
+	m.isInputFormActive = true
+	m.isActionMenuActive = false
+	slog.Debug("Active bools", "form", m.isInputFormActive, "menu", m.isActionMenuActive)
+	return func() tea.Msg {
+		return components.InputFormOpenMsg{}
+	}
+}
+
+func (m Ec2ViewModel) ssmPortForwardInputs() []components.InputField {
+	return []components.InputField{
+			{Label: "Local Port", Placeholder: "18080", CharLimit: 5},
+			{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+		}
+}
+
+func (m Ec2ViewModel) ssmPortForwardOnSubmit(values components.InputFormResult) tea.Cmd {
+	slog.Debug("OnSubmit function running")
+	localPort, _ := aws.ValidatePort(values["Local Port"])
+	remotePort, _ := aws.ValidatePort(values["Remote Port"])
+	config := aws.PortForwardConfig{
+		LocalPort:  localPort,
+		RemotePort: remotePort,
+	}
+
+	instance := m.list.SelectedItem().(aws.Ec2Instance)
+	cmd := m.app.AWS.Ssm.BuildPortForwardCmd(instance.InstanceID, config)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return SsmSessionFinishedMsg{err}
+	})
 }
