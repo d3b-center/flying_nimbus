@@ -200,6 +200,14 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case components.InputFormOpenMsg:
 		m.isInputFormActive = true
 		m.isActionMenuActive = false
+
+		// TODO Figure out why this doesn't work in ssmPortForward
+		instance := m.list.SelectedItem().(aws.Ec2Instance)
+		m.inputForm = components.NewInputForm(
+			fmt.Sprintf("Port Forward: %s", instance.Name),
+			m.ssmPortForwardInputs(),
+			m.ssmPortForwardOnSubmit,
+		)
 		return m, nil
 
 	case components.InputFormSubmitMsg:
@@ -372,6 +380,7 @@ func (m *Ec2ViewModel) buildActions() {
 func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	var err error
 	errHeader := "Failed to open SSM Shell"
+	// TODO extract this to function so ssmPortForward can reuse validation logic
 	if m.list.SelectedItem() == nil {
 		err = fmt.Errorf("%s: Selected item is nil", errHeader)
 	}
@@ -402,15 +411,6 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 	slog.Debug("SSM Port Forward chosen")
 	slog.Debug("Active bools", "form", m.isInputFormActive, "menu", m.isActionMenuActive)
-	instance := m.list.SelectedItem().(aws.Ec2Instance)
-
-	m.inputForm = components.NewInputForm(
-		fmt.Sprintf("Port Forward: %s", instance.Name),
-		m.ssmPortForwardInputs(),
-		m.ssmPortForwardOnSubmit,
-	)
-
-	slog.Debug("Input Form attributes", "title", m.inputForm.Title, "label", len(m.inputForm.Labels))
 
 	m.isInputFormActive = true
 	m.isActionMenuActive = false

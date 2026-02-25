@@ -89,7 +89,6 @@ func (m InputForm) Update(msg tea.Msg) (InputForm, tea.Cmd) {
 		cmd = m.handleKeypress(keyMsg)
 	}
 
-	m.Inputs[m.cursor], cmd = m.Inputs[m.cursor].Update(msg)
 	return m, cmd
 }
 
@@ -103,11 +102,11 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		_, cmd := m.submit()
 		return cmd
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
 		m.focusNext()
 		return textinput.Blink
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up"))):
+	case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
 		m.focusPrev()
 		return textinput.Blink
 	}
