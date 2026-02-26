@@ -67,8 +67,6 @@ func NewInputForm(title string, fields []InputField, onSubmit func(InputFormResu
 		labels[i] = f.Label
 	}
 
-	slog.Debug("Lengths at creation", "labels", len(labels), "inputs", len(inputs))
-
 	return InputForm{
 		Title:    title,
 		Inputs:   inputs,
@@ -93,7 +91,6 @@ func (m InputForm) Update(msg tea.Msg) (InputForm, tea.Cmd) {
 }
 
 func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
-	slog.Debug("Lengths at keypress", "labels", len(m.Labels), "inputs", len(m.Inputs))
 	switch {
 	case key.Matches(msg, constants.Keymap.Back):
 		return func() tea.Msg { return InputFormCancelMsg{} }
@@ -102,20 +99,16 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		_, cmd := m.submit()
 		return cmd
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
-		m.focusNext()
+	case key.Matches(msg, NextField), key.Matches(msg, PrevField):
+		m.moveCursor(msg)
 		return textinput.Blink
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
-		m.focusPrev()
-		return textinput.Blink
+	default:
+		// Pass  to focused input
+		var cmd tea.Cmd
+		m.Inputs[m.cursor], cmd = m.Inputs[m.cursor].Update(msg)
+		return cmd
 	}
-
-	// Pass  to focused input
-	var cmd tea.Cmd
-	slog.Debug("Cursor", "cursor", m.cursor)
-	m.Inputs[m.cursor], cmd = m.Inputs[m.cursor].Update(msg)
-	return cmd
 }
 
 
@@ -135,13 +128,13 @@ func (m *InputForm) submit() (InputForm, tea.Cmd) {
 	}
 }
 
-func (m *InputForm) focusNext() {
-	m.cursor = (m.cursor + 1) % len(m.Inputs)
-	m.focusCurrent()
-}
-
-func (m *InputForm) focusPrev() {
-	m.cursor = (m.cursor - 1 + len(m.Inputs)) % len(m.Inputs)
+func (m *InputForm) moveCursor(msg tea.KeyMsg) {
+	if key.Matches(msg, key.NewBinding(key.WithKeys("tab"))) {
+		m.cursor = (m.cursor + 1) % len(m.Inputs)
+	} else {
+		m.cursor = (m.cursor - 1 + len(m.Inputs)) % len(m.Inputs)
+	}
+	
 	m.focusCurrent()
 }
 
@@ -166,7 +159,7 @@ func (m InputForm) View() string {
 		rows = append(rows, inputErrorStyle.Render("x "+m.err))
 	}
 
-	rows = append(rows, modalHelpStyle.Render("up/down: select field • enter: submit • esc: cancel"))
+	rows = append(rows, modalHelpStyle.Render("tab/shft+tab: select field • enter: submit • esc: cancel"))
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 
 	return modalOverlayStyle.Render(content)

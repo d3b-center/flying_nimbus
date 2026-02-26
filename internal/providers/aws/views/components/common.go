@@ -21,6 +21,14 @@ var (
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
 	)
+	NextField = key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "next field"),
+	)
+	PrevField = key.NewBinding(
+		key.WithKeys("shift+tab"),
+		key.WithHelp("shift+tab", "previous field"),
+	)
 	LeftKey key.Binding = key.NewBinding(
 		key.WithKeys("left", "h"),
 		key.WithHelp("left/h", "left"),

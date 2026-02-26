@@ -6,7 +6,7 @@ import (
 	aws "flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
-	"flying_nimbus/internal/providers/aws/views/components"
+	c "flying_nimbus/internal/providers/aws/views/components"
 	"fmt"
 	"log/slog"
 
@@ -56,7 +56,7 @@ func (m RdsViewModel) Title() string {
 }
 
 func (m RdsViewModel) Commands() common.Commands {
-	return []key.Binding{components.ForceRefresh, components.ToggleFocus}
+	return []key.Binding{c.ForceRefresh, c.ToggleFocus}
 }
 
 // Messages returned from async commands.
@@ -124,11 +124,11 @@ func (m RdsViewModel) View() string {
 	}
 
 	if m.isViewportFocused {
-		instanceDetailStyle = instanceDetailStyle.BorderForeground(components.FocusedColor)
-		instancesListStyle = instancesListStyle.BorderForeground(components.UnfocusedColor)
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(c.FocusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(c.UnfocusedColor)
 	} else {
-		instanceDetailStyle = instanceDetailStyle.BorderForeground(components.UnfocusedColor)
-		instancesListStyle = instancesListStyle.BorderForeground(components.FocusedColor)
+		instanceDetailStyle = instanceDetailStyle.BorderForeground(c.UnfocusedColor)
+		instancesListStyle = instancesListStyle.BorderForeground(c.FocusedColor)
 	}
 
 	instanceDetailStyle.MaxHeight(m.windowSize.Height)
@@ -164,7 +164,7 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 
 	case tea.KeyMsg:
-		if key.Matches(msg, components.ForceRefresh) {
+		if key.Matches(msg, c.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
 			cmds = append(cmds, cmd)
@@ -209,9 +209,13 @@ func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 
 	var cmd tea.Cmd
 
-	if key.Matches(msg, components.ToggleFocus) {
+	if key.Matches(msg, c.ToggleFocus) {
 		m.isViewportFocused = !m.isViewportFocused
 		return nil
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+
 	}
 
 	if m.isViewportFocused {
@@ -227,10 +231,10 @@ func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
 
-	usableHeight := m.windowSize.Height - components.BorderHeight
-	usableWidth := m.windowSize.Width - components.BorderWidth
+	usableHeight := m.windowSize.Height - c.BorderHeight
+	usableWidth := m.windowSize.Width - c.BorderWidth
 
-	m.instanceListWidth = int(float64(usableWidth) * components.InstanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * c.InstanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.list.SetSize(m.instanceListWidth, usableHeight)
