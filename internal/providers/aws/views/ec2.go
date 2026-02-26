@@ -18,51 +18,23 @@ import (
 	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const (
-	ec2InstanceListWidthRatio = 0.25
+var startStopInstance = key.NewBinding(
+	key.WithKeys("s"),
+	key.WithHelp("s", "Start/Stop Ec2"),
 )
-const ec2InstanceListWidthRatio = 0.25
+
 type (
 	ec2InstancesLoadedMsg   []list.Item
+	SsmSessionFinishedMsg   struct{ err error }
 	instanceActionStatusMsg struct {
 		Err error
 	}
 	InstanceState string
 )
 
-var startStopInstance = key.NewBinding(
-	key.WithKeys("s"),
-	key.WithHelp("s", "Start/Stop Ec2"),
-)
-
 const (
 	StateRunning InstanceState = "running"
 	StateStopped InstanceState = "stopped"
-)
-
-// Ec2ViewModel manages the EC2 instance list and details view.
-type Ec2ViewModel struct {
-	app                  *app.App
-	list                 list.Model
-	loader               spinner.Model
-	isLoading            bool
-	instanceDetail       string
-	detailsFocused       bool
-	detailViewport       viewport.Model
-	windowSize           common.ContentWindowSizeMsg
-	instanceListWidth    int
-	detailsWidth         int
-	contentHeight        int
-	inputRoutingStrategy common.InputRoutingStrategy
-}
-
-type (
-	ec2InstancesLoadedMsg []list.Item
-	SsmSessionFinishedMsg struct{ err error }
-	ec2InstancesLoadedMsg   []list.Item
-	instanceActionStatusMsg struct {
-		Err error
-	}
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -373,7 +345,7 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return m.handleStartStop()
 	}
 
-	if m.detailsFocused {
+	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 		return cmd
 	} else {

@@ -1,8 +1,6 @@
 package views
 
 import (
-	"flying_nimbus/internal/providers/aws/backend"
-	"encoding/json"
 	"flying_nimbus/internal/tui/common"
 	"fmt"
 	"log/slog"
