@@ -16,6 +16,8 @@ type AwsService struct {
 	Sg             *SgService
 	ServiceCatalog *ServiceCatalogService
 	Ssm            *SsmService
+	Identity       *CallerIdentity
+	LoggedIn       bool
 }
 
 func InitAwsService(ctx context.Context) (*AwsService, error) {
@@ -24,6 +26,12 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("Unable to load SDK config: %v", err)
+	}
+
+	identity, err := InitCallerIdentity(ctx, cfg)
+	var loggedIn = false
+	if err == nil {
+		loggedIn = true
 	}
 
 	slog.Info(fmt.Sprintf("AWS Region: %s", cfg.Region))
@@ -37,6 +45,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	ssm := InitSsmService(cfg)
 
 	return &AwsService{
+	service := AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
 		Rds:            rds,
@@ -44,5 +53,10 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		ServiceCatalog: serviceCatalog,
 		Ssm:            ssm,
 	}, nil
+		Identity:       identity,
+		LoggedIn:       loggedIn,
+	}
+
+	return &service, nil
 
 }
