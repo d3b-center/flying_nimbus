@@ -342,6 +342,11 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 	}
 
+	if key.Matches(msg, toggleFocus) {
+		m.isDetailViewportFocused = !m.isDetailViewportFocused
+		return nil
+	}
+
 	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 		return cmd

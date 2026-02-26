@@ -110,11 +110,6 @@ func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 	return err
 }
 
-func (e Ec2Service) RefreshInstanceState(ctx context.Context, instanceId string) (Ec2Instance, error) {
-
-	return Ec2Instance{}, nil
-}
-
 // ListInstances retrieves all EC2 instances with pagination.
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
 	input := ec2.DescribeInstancesInput{}

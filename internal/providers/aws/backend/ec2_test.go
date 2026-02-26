@@ -16,6 +16,10 @@ type mockEc2API struct {
 	volumesOutput   *ec2.DescribeVolumesOutput
 	instancesErr    error
 	volumesErr      error
+	startInput      *ec2.StartInstancesInput
+	stopInput       *ec2.StopInstancesInput
+	startErr        error
+	stopErr         error
 }
 
 func (m *mockEc2API) DescribeInstances(
@@ -38,6 +42,30 @@ func (m *mockEc2API) DescribeVolumes(
 		return nil, m.volumesErr
 	}
 	return m.volumesOutput, nil
+}
+
+func (m *mockEc2API) StartInstances(
+	ctx context.Context,
+	params *ec2.StartInstancesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.StartInstancesOutput, error) {
+	m.startInput = params
+	if m.startErr != nil {
+		return nil, m.startErr
+	}
+	return &ec2.StartInstancesOutput{}, nil
+}
+
+func (m *mockEc2API) StopInstances(
+	ctx context.Context,
+	params *ec2.StopInstancesInput,
+	opts ...func(*ec2.Options),
+) (*ec2.StopInstancesOutput, error) {
+	m.stopInput = params
+	if m.stopErr != nil {
+		return nil, m.stopErr
+	}
+	return &ec2.StopInstancesOutput{}, nil
 }
 
 func TestEc2Instance_ListItemInterface(t *testing.T) {
@@ -318,5 +346,45 @@ func TestGetEbsVolumeData_VolumeAPIError(t *testing.T) {
 	// Should return empty slice on error
 	if len(volumes) != 0 {
 		t.Errorf("expected 0 volumes on error, got %d", len(volumes))
+	}
+}
+
+func TestEc2Service_StartInstance_Success(t *testing.T) {
+	mock := &mockEc2API{}
+	svc := &Ec2Service{api: mock}
+
+	err := svc.StartInstance(context.Background(), "i-abc123")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.startInput == nil {
+		t.Fatal("expected StartInstances to be called")
+	}
+
+	if len(mock.startInput.InstanceIds) != 1 ||
+		mock.startInput.InstanceIds[0] != "i-abc123" {
+		t.Errorf("unexpected instance id passed: %+v", mock.startInput.InstanceIds)
+	}
+}
+
+func TestEc2Service_StopInstance_Success(t *testing.T) {
+	mock := &mockEc2API{}
+	svc := &Ec2Service{api: mock}
+
+	err := svc.StopInstance(context.Background(), "i-xyz789")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.stopInput == nil {
+		t.Fatal("expected StopInstances to be called")
+	}
+
+	if len(mock.stopInput.InstanceIds) != 1 ||
+		mock.stopInput.InstanceIds[0] != "i-xyz789" {
+		t.Errorf("unexpected instance id passed: %+v", mock.stopInput.InstanceIds)
 	}
 }
