@@ -18,11 +18,6 @@ import (
 	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-var startStopInstance = key.NewBinding(
-	key.WithKeys("s"),
-	key.WithHelp("s", "Start/Stop Ec2"),
-)
-
 type (
 	ec2InstancesLoadedMsg   []list.Item
 	SsmSessionFinishedMsg   struct{ err error }
@@ -113,7 +108,7 @@ func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return []key.Binding{toggleFocus, forceRefresh, startStopInstance}
+	return []key.Binding{toggleFocus, forceRefresh}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -200,7 +195,13 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			slog.Error("Error with modal action", "error", msg.err)
 		}
-		return m, nil
+		m.isLoading = true
+		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+
+	case instanceActionStatusMsg:
+		m.isActionMenuActive = false
+		m.isLoading = true
+		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
@@ -341,10 +342,6 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 	}
 
-	if key.Matches(msg, startStopInstance) {
-		return m.handleStartStop()
-	}
-
 	if m.isDetailViewportFocused {
 		m.detailViewport, cmd = m.detailViewport.Update(msg)
 		return cmd
@@ -357,6 +354,7 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 func (m *Ec2ViewModel) buildActions() {
 	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
 		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+		{Label: "Start/Stop", Action: m.handleStartStop},
 	})
 }
 
