@@ -19,13 +19,18 @@ import (
 	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const (
-	ec2InstanceListWidthRatio = 0.25
+type (
+	ec2InstancesLoadedMsg   []list.Item
+	SsmSessionFinishedMsg   struct{ err error }
+	instanceActionStatusMsg struct {
+		Err error
+	}
+	InstanceState string
 )
 
-type (
-	ec2InstancesLoadedMsg []list.Item
-	SsmSessionFinishedMsg struct{ err error }
+const (
+	StateRunning InstanceState = "running"
+	StateStopped InstanceState = "stopped"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -87,12 +92,30 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
+func startInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
+	return func() tea.Msg {
+		err := ec2Service.StartInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
+	}
+}
+
+func stopInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
+	return func() tea.Msg {
+		err := ec2Service.StopInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
+	}
+}
+
 func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 	return m.inputRoutingStrategy
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
+<<<<<<< HEAD
 	return []key.Binding{c.ToggleFocus}
+=======
+	return []key.Binding{toggleFocus, forceRefresh}
+>>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -197,6 +220,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+<<<<<<< HEAD
 	case c.InputFormOpenMsg:
 		m.isInputFormActive = true
 		m.isActionMenuActive = false
@@ -219,6 +243,12 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isInputFormActive = false
 		m.isActionMenuActive = true
 		return m, nil
+=======
+	case instanceActionStatusMsg:
+		m.isActionMenuActive = false
+		m.isLoading = true
+		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+>>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
 
 	case tea.KeyMsg:
 		if key.Matches(msg, c.ForceRefresh) {
@@ -295,7 +325,11 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
+<<<<<<< HEAD
 	rows = append(rows, c.GenerateEbsVolumeRows(instance.Volumes)...)
+=======
+	rows = append(rows, GenerateEbsVolumeRows(instance.VolumeIds)...)
+>>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
 	rows = append(rows, c.GenerateTagRows(instance.Tags)...)
@@ -310,7 +344,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - c.BorderWidth
 	usableHeight := msg.Height - c.BorderHeight
 
-	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.contentHeight = usableHeight
@@ -358,7 +392,12 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if key.Matches(msg, c.ToggleFocus) {
+	if key.Matches(msg, forceRefresh) {
+		m.isLoading = true
+		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+	}
+
+	if key.Matches(msg, toggleFocus) {
 		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		return nil
 	}
@@ -376,6 +415,7 @@ func (m *Ec2ViewModel) buildActions() {
 	m.actionMenu = c.NewActionModal("EC2 Actions", []c.ActionItem{
 		{Label: "Shell", Action: m.ssmShell},
 		{Label: "Port Forward", Action: m.ssmPortForward},
+		{Label: "Start/Stop", Action: m.handleStartStop},
 	})
 }
 
@@ -461,4 +501,21 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return SsmSessionFinishedMsg{err}
 	})
+	
+func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
+	if m.isLoading {
+		return nil
+	}
+
+	instance, ok := m.list.SelectedItem().(aws.Ec2Instance)
+	if !ok {
+		return nil
+	}
+
+	if instance.State == string(StateRunning) {
+		return stopInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
+	} else if instance.State == string(StateStopped) {
+		return startInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
+	}
+	return nil
 }
