@@ -111,11 +111,7 @@ func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-<<<<<<< HEAD
-	return []key.Binding{c.ToggleFocus}
-=======
-	return []key.Binding{toggleFocus, forceRefresh}
->>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
+	return []key.Binding{c.ToggleFocus, c.ForceRefresh}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -220,7 +216,6 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-<<<<<<< HEAD
 	case c.InputFormOpenMsg:
 		m.isInputFormActive = true
 		m.isActionMenuActive = false
@@ -243,12 +238,11 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isInputFormActive = false
 		m.isActionMenuActive = true
 		return m, nil
-=======
+
 	case instanceActionStatusMsg:
 		m.isActionMenuActive = false
 		m.isLoading = true
 		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
->>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
 
 	case tea.KeyMsg:
 		if key.Matches(msg, c.ForceRefresh) {
@@ -325,11 +319,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
-<<<<<<< HEAD
-	rows = append(rows, c.GenerateEbsVolumeRows(instance.Volumes)...)
-=======
-	rows = append(rows, GenerateEbsVolumeRows(instance.VolumeIds)...)
->>>>>>> b5e6db7770fa40ebe378aa182a1c21c44987e651
+	rows = append(rows, c.GenerateEbsVolumeRows(instance.VolumeIds)...)
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
 	rows = append(rows, c.GenerateTagRows(instance.Tags)...)
@@ -344,7 +334,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - c.BorderWidth
 	usableHeight := msg.Height - c.BorderHeight
 
-	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * c.InstanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.contentHeight = usableHeight
@@ -392,12 +382,12 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if key.Matches(msg, forceRefresh) {
+	if key.Matches(msg, c.ForceRefresh) {
 		m.isLoading = true
 		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 	}
 
-	if key.Matches(msg, toggleFocus) {
+	if key.Matches(msg, c.ToggleFocus) {
 		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		return nil
 	}
@@ -501,7 +491,8 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return SsmSessionFinishedMsg{err}
 	})
-	
+}
+
 func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
 	if m.isLoading {
 		return nil
