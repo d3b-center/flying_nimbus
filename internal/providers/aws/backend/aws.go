@@ -45,18 +45,14 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	ssm := InitSsmService(cfg)
 
 	return &AwsService{
-	service := AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
 		Rds:            rds,
 		Sg:             sg,
 		ServiceCatalog: serviceCatalog,
 		Ssm:            ssm,
-	}, nil
 		Identity:       identity,
 		LoggedIn:       loggedIn,
-	}
-
-	return &service, nil
+	}, nil
 
 }
