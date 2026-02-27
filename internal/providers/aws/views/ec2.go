@@ -217,6 +217,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case c.InputFormCancelMsg:
 		m.isInputFormActive = false
+		m.isActionMenuActive = true
 		return m, nil
 
 	case tea.KeyMsg:
@@ -331,7 +332,7 @@ func (m *Ec2ViewModel) updateInputRouting() {
 	m.inputRoutingStrategy = common.RouteGlobalFirst
 
 	filterState := m.list.FilterState()
-	if filterState == list.Filtering || m.isActionMenuActive {
+	if filterState == list.Filtering || m.isActionMenuActive || m.isInputFormActive {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	}
 }

@@ -10,8 +10,6 @@ import (
 
 	"flying_nimbus/internal/tui/constants"
 )
-// Let parent specify input fields, have basic validation supplied, let parent pass in lambda to get input back as object
-// Also pop up modal and send back cancel messages
 
 var (
 	inputLabelStyle = lipgloss.NewStyle().
@@ -96,8 +94,7 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return InputFormCancelMsg{} }
 
 	case key.Matches(msg, constants.Keymap.Enter):
-		_, cmd := m.submit()
-		return cmd
+		return m.submit()
 
 	case key.Matches(msg, NextField), key.Matches(msg, PrevField):
 		m.moveCursor(msg)
@@ -112,7 +109,7 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 }
 
 
-func (m *InputForm) submit() (InputForm, tea.Cmd) {
+func (m *InputForm) submit() tea.Cmd {
 	slog.Debug("Form submitted!")
 	m.err = ""
 	values := make(InputFormResult)
@@ -120,7 +117,7 @@ func (m *InputForm) submit() (InputForm, tea.Cmd) {
 		values[m.Labels[i]] = input.Value()
 	}
 
-	return *m, func() tea.Msg {
+	return func() tea.Msg {
 		return InputFormSubmitMsg{
 			Values:   values,
 			OnSubmit: m.onSubmit,
@@ -129,7 +126,7 @@ func (m *InputForm) submit() (InputForm, tea.Cmd) {
 }
 
 func (m *InputForm) moveCursor(msg tea.KeyMsg) {
-	if key.Matches(msg, key.NewBinding(key.WithKeys("tab"))) {
+	if key.Matches(msg, NextField) {
 		m.cursor = (m.cursor + 1) % len(m.Inputs)
 	} else {
 		m.cursor = (m.cursor - 1 + len(m.Inputs)) % len(m.Inputs)
