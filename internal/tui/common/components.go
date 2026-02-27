@@ -25,3 +25,41 @@ func RenderModal(modalContent string, window tea.WindowSizeMsg) string {
 	)
 
 }
+
+func RenderErrorModal(
+	title string,
+	message []string,
+	footer string,
+	window tea.WindowSizeMsg,
+) string {
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("1")) // red
+
+	bodyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("250"))
+
+	footerStyle := lipgloss.NewStyle().
+		Faint(true)
+
+	content := []string{
+		titleStyle.Render(title),
+		"",
+	}
+
+	for _, line := range message {
+		content = append(content, bodyStyle.Render(line))
+	}
+
+	if footer != "" {
+		content = append(content, "", footerStyle.Render(footer))
+	}
+
+	modalContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		content...,
+	)
+
+	return RenderModal(modalContent, window)
+}
