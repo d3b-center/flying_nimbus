@@ -1,7 +1,6 @@
 package views
 
 import (
-	"flying_nimbus/internal/providers/aws/backend"
 	"flying_nimbus/internal/tui/common"
 	"fmt"
 	"log/slog"
@@ -54,14 +53,11 @@ func GenerateTagRows(tags map[string]string) []string {
 }
 
 // GenerateEbsVolumeRows takes volumes and formats their data for rendering
-func GenerateEbsVolumeRows(volumes []aws.EbsVolume) []string {
-	var rows []string
+func GenerateEbsVolumeRows(volumes []string) []string {
+	rows := make([]string, len(volumes))
 
-	for _, vol := range volumes {
-		rows = append(rows,
-			fmt.Sprintf("  • %s", vol.VolumeID),
-			fmt.Sprintf("    Size: %d GB | Type: %s ", vol.SizeGb, vol.StorageType),
-		)
+	for i, vol := range volumes {
+		rows[i] = fmt.Sprintf("  • %s", vol)
 	}
 
 	return rows

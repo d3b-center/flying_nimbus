@@ -18,13 +18,18 @@ import (
 	"github.com/rmhubbert/bubbletea-overlay"
 )
 
-const (
-	ec2InstanceListWidthRatio = 0.25
+type (
+	ec2InstancesLoadedMsg   []list.Item
+	SsmSessionFinishedMsg   struct{ err error }
+	instanceActionStatusMsg struct {
+		Err error
+	}
+	InstanceState string
 )
 
-type (
-	ec2InstancesLoadedMsg []list.Item
-	SsmSessionFinishedMsg struct{ err error }
+const (
+	StateRunning InstanceState = "running"
+	StateStopped InstanceState = "stopped"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -84,12 +89,26 @@ func fetchEc2InstancesCmd(ctx context.Context, ec2Service *aws.Ec2Service) tea.C
 	}
 }
 
+func startInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
+	return func() tea.Msg {
+		err := ec2Service.StartInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
+	}
+}
+
+func stopInstanceCmd(ctx context.Context, ec2Service *aws.Ec2Service, instanceId string) tea.Cmd {
+	return func() tea.Msg {
+		err := ec2Service.StopInstance(ctx, instanceId)
+		return instanceActionStatusMsg{Err: err}
+	}
+}
+
 func (m Ec2ViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
 	return m.inputRoutingStrategy
 }
 
 func (m Ec2ViewModel) Commands() common.Commands {
-	return []key.Binding{toggleFocus}
+	return []key.Binding{toggleFocus, forceRefresh}
 }
 
 func (m Ec2ViewModel) Title() string {
@@ -178,6 +197,11 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case instanceActionStatusMsg:
+		m.isActionMenuActive = false
+		m.isLoading = true
+		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+
 	case tea.KeyMsg:
 		if key.Matches(msg, forceRefresh) {
 			m.isLoading = true
@@ -253,7 +277,7 @@ func generateEc2InstanceDetail(selectedItem list.Item) string {
 	}
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("EBS Volumes"))
-	rows = append(rows, GenerateEbsVolumeRows(instance.Volumes)...)
+	rows = append(rows, GenerateEbsVolumeRows(instance.VolumeIds)...)
 
 	rows = append(rows, "", common.SectionHeaderStyle.Render("Tags"))
 	rows = append(rows, GenerateTagRows(instance.Tags)...)
@@ -268,7 +292,7 @@ func (m *Ec2ViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableWidth := msg.Width - BorderWidth
 	usableHeight := msg.Height - BorderHeight
 
-	m.instanceListWidth = int(float64(usableWidth) * ec2InstanceListWidthRatio)
+	m.instanceListWidth = int(float64(usableWidth) * instanceListWidthRatio)
 	m.detailsWidth = usableWidth - m.instanceListWidth
 
 	m.contentHeight = usableHeight
@@ -312,6 +336,11 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
+	if key.Matches(msg, forceRefresh) {
+		m.isLoading = true
+		return fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+	}
+
 	if key.Matches(msg, toggleFocus) {
 		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		return nil
@@ -329,6 +358,7 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 func (m *Ec2ViewModel) buildActions() {
 	m.actionMenu = NewActionModal("EC2 Actions", []ActionItem{
 		{Label: "Shell", Action: m.ssmShell}, // Add more actions here
+		{Label: "Start/Stop", Action: m.handleStartStop},
 	})
 }
 
@@ -360,4 +390,22 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 		return ModalResponseMsg{err}
 	})
 
+}
+
+func (m *Ec2ViewModel) handleStartStop() tea.Cmd {
+	if m.isLoading {
+		return nil
+	}
+
+	instance, ok := m.list.SelectedItem().(aws.Ec2Instance)
+	if !ok {
+		return nil
+	}
+
+	if instance.State == string(StateRunning) {
+		return stopInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
+	} else if instance.State == string(StateStopped) {
+		return startInstanceCmd(m.app.Context, m.app.AWS.Ec2, instance.InstanceID)
+	}
+	return nil
 }
