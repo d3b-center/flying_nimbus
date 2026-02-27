@@ -195,8 +195,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			slog.Error("Error with modal action", "error", msg.err)
 		}
-		m.isLoading = true
-		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
+		return m, nil
 
 	case instanceActionStatusMsg:
 		m.isActionMenuActive = false
