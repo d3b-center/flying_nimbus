@@ -13,18 +13,18 @@ import (
 
 var (
 	inputLabelStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("62")).
-		Bold(true).
-		Width(14)
+			Foreground(lipgloss.Color("62")).
+			Bold(true).
+			Width(14)
 
 	inputErrorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196"))
+			Foreground(lipgloss.Color("196"))
 )
 
 type InputField struct {
-	Label string
+	Label       string
 	Placeholder string
-	CharLimit int
+	CharLimit   int
 }
 
 // Temporary struct that passed into parent's OnSubmit function
@@ -34,16 +34,16 @@ type InputFormCancelMsg struct{}
 type InputFormOpenMsg struct{}
 
 type InputFormSubmitMsg struct {
-	Values InputFormResult
+	Values   InputFormResult
 	OnSubmit func(InputFormResult) tea.Cmd
 }
 
 type InputForm struct {
-	Title string
-	Inputs []textinput.Model
-	Labels []string
-	cursor int
-	err string
+	title    string
+	inputs   []textinput.Model
+	labels   []string
+	cursor   int
+	err      string
 	onSubmit func(InputFormResult) tea.Cmd
 }
 
@@ -66,10 +66,10 @@ func NewInputForm(title string, fields []InputField, onSubmit func(InputFormResu
 	}
 
 	return InputForm{
-		Title:    title,
-		Inputs:   inputs,
-		Labels:   labels,
-		cursor:  0,
+		title:    title,
+		inputs:   inputs,
+		labels:   labels,
+		cursor:   0,
 		onSubmit: onSubmit,
 	}
 }
@@ -103,18 +103,17 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	default:
 		// Pass  to focused input
 		var cmd tea.Cmd
-		m.Inputs[m.cursor], cmd = m.Inputs[m.cursor].Update(msg)
+		m.inputs[m.cursor], cmd = m.inputs[m.cursor].Update(msg)
 		return cmd
 	}
 }
-
 
 func (m *InputForm) submit() tea.Cmd {
 	slog.Debug("Form submitted!")
 	m.err = ""
 	values := make(InputFormResult)
-	for i, input := range m.Inputs {
-		values[m.Labels[i]] = input.Value()
+	for i, input := range m.inputs {
+		values[m.labels[i]] = input.Value()
 	}
 
 	return func() tea.Msg {
@@ -127,28 +126,28 @@ func (m *InputForm) submit() tea.Cmd {
 
 func (m *InputForm) moveCursor(msg tea.KeyMsg) {
 	if key.Matches(msg, NextField) {
-		m.cursor = (m.cursor + 1) % len(m.Inputs)
+		m.cursor = (m.cursor + 1) % len(m.inputs)
 	} else {
-		m.cursor = (m.cursor - 1 + len(m.Inputs)) % len(m.Inputs)
+		m.cursor = (m.cursor - 1 + len(m.inputs)) % len(m.inputs)
 	}
-	
+
 	m.focusCurrent()
 }
 
 func (m *InputForm) focusCurrent() {
-	for i := range m.Inputs {
-		m.Inputs[i].Blur()
+	for i := range m.inputs {
+		m.inputs[i].Blur()
 	}
-	m.Inputs[m.cursor].Focus()
+	m.inputs[m.cursor].Focus()
 }
 
 func (m InputForm) View() string {
 	var rows []string
 
-	rows = append(rows, modalTitleStyle.Render(m.Title))
+	rows = append(rows, modalTitleStyle.Render(m.title))
 
-	for i, input := range m.Inputs {
-		label := inputLabelStyle.Render(m.Labels[i] + ":")
+	for i, input := range m.inputs {
+		label := inputLabelStyle.Render(m.labels[i] + ":")
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Center, label, input.View()))
 	}
 

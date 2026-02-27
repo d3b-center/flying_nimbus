@@ -4,9 +4,9 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	aws "flying_nimbus/internal/providers/aws/backend"
+	c "flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
-	c "flying_nimbus/internal/providers/aws/views/components"
 	"fmt"
 	"log/slog"
 

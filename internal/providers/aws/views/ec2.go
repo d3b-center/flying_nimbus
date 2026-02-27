@@ -44,8 +44,8 @@ type Ec2ViewModel struct {
 	inputRoutingStrategy    common.InputRoutingStrategy
 	actionMenu              c.ActionMenu
 	isActionMenuActive      bool
-	inputForm 				c.InputForm
-	isInputFormActive 		bool
+	inputForm               c.InputForm
+	isInputFormActive       bool
 }
 
 // Creates a new EC2 view model
@@ -398,11 +398,11 @@ func (m Ec2ViewModel) validateSsmInstance() (aws.Ec2Instance, error) {
 	}
 
 	return instance, err
-} 
+}
 
 func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	instance, err := m.validateSsmInstance()
-	
+
 	if err != nil {
 		return func() tea.Msg {
 			return c.ModalResponseMsg{err}
@@ -415,6 +415,7 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 	})
 
 }
+
 // ActionMenu callback
 func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 	_, err := m.validateSsmInstance()
@@ -434,9 +435,9 @@ func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 
 func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
-			{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
-			{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
-		}
+		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
+		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+	}
 }
 
 // InputForm callback
