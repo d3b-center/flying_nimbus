@@ -2,6 +2,7 @@ package views
 
 import (
 	"flying_nimbus/internal/providers/aws/backend"
+	c "flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"testing"
 
@@ -38,13 +39,13 @@ func TestUpdateLayout(t *testing.T) {
 
 	model.updateLayout(msg)
 
-	expectedListWidth := int(float64(100-BorderWidth) * instanceListWidthRatio)
+	expectedListWidth := int(float64(100-c.BorderWidth) * c.InstanceListWidthRatio)
 
 	if model.instanceListWidth != expectedListWidth && model.list.Width() != expectedListWidth {
 		t.Errorf("expected %d, got %d", expectedListWidth, model.instanceListWidth)
 	}
 
-	if model.detailsWidth != (100-BorderWidth)-expectedListWidth {
+	if model.detailsWidth != (100-c.BorderWidth)-expectedListWidth {
 		t.Errorf("details width mismatch")
 	}
 }
