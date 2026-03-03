@@ -8,6 +8,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -97,6 +98,16 @@ func (a artifactItem) Description() string {
 }
 
 func (a artifactItem) FilterValue() string { return a.Name }
+
+// paramByKey returns the ProvisioningParameter for the given key, or nil if not found.
+func paramByKey(params []aws.ProvisioningParameter, key string) *aws.ProvisioningParameter {
+	for i := range params {
+		if params[i].Key == key {
+			return &params[i]
+		}
+	}
+	return nil
+}
 
 // InitServiceCatalogViewModel builds a ServiceCatalogViewModel with default layout (catalog mode by default).
 func InitServiceCatalogViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) ServiceCatalogViewModel {
@@ -287,6 +298,7 @@ func (m ServiceCatalogViewModel) renderLaunchOverlay() string {
 func (m ServiceCatalogViewModel) renderProvisionForm() string {
 	header := modalTitleStyle.Render("Provision: " + m.launchProduct.ProductName)
 	rows := []string{header, ""}
+	const maxAllowedShow = 10
 	for i, k := range m.launchFormKeys {
 		label := k
 		if k == "name" {
@@ -301,6 +313,16 @@ func (m ServiceCatalogViewModel) renderProvisionForm() string {
 				display = "(not set)"
 			}
 			rows = append(rows, common.KV(label, display))
+		}
+		// Show allowed values for constrained catalog parameters
+		if k != "name" {
+			if p := paramByKey(m.launchParams, k); p != nil && len(p.AllowedValues) > 0 {
+				show := p.AllowedValues
+				if len(show) > maxAllowedShow {
+					show = append(append([]string{}, show[:maxAllowedShow]...), "...")
+				}
+				rows = append(rows, "  Allowed: "+strings.Join(show, ", "))
+			}
 		}
 	}
 	rows = append(rows, "", modalHelpStyle.Render("tab: next field • shift+tab: prev • ctrl+s: submit • esc: cancel"))
@@ -584,6 +606,29 @@ func (m *ServiceCatalogViewModel) updateLaunchForm(msg tea.Msg) tea.Cmd {
 			for k, v := range m.launchFormValues {
 				if k != "name" {
 					params[k] = v
+				}
+			}
+			// Validate constrained parameters (e.g. instance type) against AllowedValues
+			for _, p := range m.launchParams {
+				if len(p.AllowedValues) == 0 {
+					continue
+				}
+				val := params[p.Key]
+				var allowed bool
+				for _, a := range p.AllowedValues {
+					if val == a {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					const maxShow = 10
+					show := p.AllowedValues
+					if len(show) > maxShow {
+						show = append(show[:maxShow:maxShow], "...")
+					}
+					errMsg := fmt.Sprintf("%q is not supported for %s. Allowed: %s", val, p.Key, strings.Join(show, ", "))
+					return func() tea.Msg { return ModalResponseMsg{fmt.Errorf("%s", errMsg)} }
 				}
 			}
 			m.launchState = launchProvisioning
