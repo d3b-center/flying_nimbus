@@ -214,10 +214,6 @@ func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if key.Matches(msg, constants.Keymap.Enter) {
-
-	}
-
 	if m.isViewportFocused {
 		m.viewport, cmd = m.viewport.Update(msg)
 	} else {
