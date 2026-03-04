@@ -105,13 +105,13 @@ func (s *SsmService) BuildRemotePortForwardCmd(instanceID string, config PortFor
 }
 
 // ValidatePort checks if a port string is a valid port number.
-func ValidatePort(port string) (int, error) {
+func ValidatePort(port string) error {
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		return 0, fmt.Errorf("invalid port number: %s", port)
+		return fmt.Errorf("invalid port number: %s", port)
 	}
 	if p < 1 || p > 65535 {
-		return 0, fmt.Errorf("port must be between 1 and 65535, got %d", p)
+		return fmt.Errorf("port must be between 1 and 65535, got %d", p)
 	}
-	return p, nil
+	return nil
 }

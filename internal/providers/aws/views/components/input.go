@@ -18,13 +18,20 @@ var (
 			Width(14)
 
 	inputErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
+			Foreground(lipgloss.Color("196")).
+			Bold(true).
+			Width(14)
+	
+	errorPopupStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
 )
 
 type InputField struct {
 	Label       string
 	Placeholder string
 	CharLimit   int
+	Validator func(string) error
 }
 
 // Temporary struct that passed into parent's OnSubmit function
@@ -43,7 +50,6 @@ type InputForm struct {
 	inputs   []textinput.Model
 	labels   []string
 	cursor   int
-	err      string
 	onSubmit func(InputFormResult) tea.Cmd
 }
 
@@ -58,6 +64,7 @@ func NewInputForm(title string, fields []InputField, onSubmit func(InputFormResu
 		ti.Placeholder = f.Placeholder
 		ti.CharLimit = f.CharLimit
 		ti.Width = 20
+		ti.Validate = f.Validator
 		if i == 0 {
 			ti.Focus()
 		}
@@ -81,8 +88,9 @@ func (m InputForm) Init() tea.Cmd {
 func (m InputForm) Update(msg tea.Msg) (InputForm, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		cmd = m.handleKeypress(keyMsg)
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		cmd = m.handleKeypress(msg)
 	}
 
 	return m, cmd
@@ -109,13 +117,22 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *InputForm) submit() tea.Cmd {
-	slog.Debug("Form submitted!")
-	m.err = ""
+	var hasErrors bool
+
 	values := make(InputFormResult)
 	for i, input := range m.inputs {
+		if input.Err != nil {
+			hasErrors = true
+			slog.Error(input.Err.Error())
+		}
 		values[m.labels[i]] = input.Value()
 	}
 
+	if hasErrors {
+		return nil
+	}
+
+	slog.Debug("Form submitted!")
 	return func() tea.Msg {
 		return InputFormSubmitMsg{
 			Values:   values,
@@ -146,13 +163,20 @@ func (m InputForm) View() string {
 
 	rows = append(rows, modalTitleStyle.Render(m.title))
 
+	var hasErrors bool
+
 	for i, input := range m.inputs {
-		label := inputLabelStyle.Render(m.labels[i] + ":")
+		style := inputLabelStyle
+		if input.Err != nil {
+			hasErrors = true
+			style = inputErrorStyle
+		}
+		label := style.Render(m.labels[i] + ":")
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Center, label, input.View()))
 	}
 
-	if m.err != "" {
-		rows = append(rows, inputErrorStyle.Render("x "+m.err))
+	if hasErrors {
+		rows = append(rows, errorPopupStyle.Render("\nInput is invalid!\n"))
 	}
 
 	rows = append(rows, modalHelpStyle.Render("tab/shft+tab: select field • enter: submit • esc: cancel"))

@@ -9,6 +9,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -465,8 +466,8 @@ func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 
 func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
-		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
-		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+		{Label: "Local Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 	}
 }
 
@@ -480,20 +481,8 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 		}
 	}
 
-	localPort, err := aws.ValidatePort(values["Local Port"])
-	if err != nil {
-		localPortErr := fmt.Errorf("Invalid local port: %v", err)
-		return func() tea.Msg {
-			return c.ModalResponseMsg{localPortErr}
-		}
-	}
-	remotePort, err := aws.ValidatePort(values["Remote Port"])
-	if err != nil {
-		remotePortErr := fmt.Errorf("Invalid remote port: %v", err)
-		return func() tea.Msg {
-			return c.ModalResponseMsg{remotePortErr}
-		}
-	}
+	localPort, _ := strconv.Atoi(values["Local Port"])
+	remotePort, _ := strconv.Atoi(values["Remote Port"])
 
 	config := aws.PortForwardConfig{
 		LocalPort:  localPort,
