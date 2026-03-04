@@ -103,6 +103,7 @@ type serviceCatalogAPI interface {
 	ListLaunchPaths(ctx context.Context, params *servicecatalog.ListLaunchPathsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ListLaunchPathsOutput, error)
 	DescribeProvisioningParameters(ctx context.Context, params *servicecatalog.DescribeProvisioningParametersInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.DescribeProvisioningParametersOutput, error)
 	ProvisionProduct(ctx context.Context, params *servicecatalog.ProvisionProductInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ProvisionProductOutput, error)
+	TerminateProvisionedProduct(ctx context.Context, params *servicecatalog.TerminateProvisionedProductInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.TerminateProvisionedProductOutput, error)
 }
 
 // ServiceCatalogService provides access to AWS Service Catalog (catalog products, provision, provisioned products).
@@ -422,4 +423,27 @@ func (s *ServiceCatalogService) StopProvisionedProduct(ctx context.Context, _, l
 		return fmt.Errorf("no EC2 instances found for this product")
 	}
 	return s.ec2.StopInstances(ctx, instanceIDs)
+}
+
+// TerminateProvisionedProduct deprovisions a provisioned product (removes it from Service Catalog and deletes the underlying stack/resources).
+func (s *ServiceCatalogService) TerminateProvisionedProduct(ctx context.Context, provisionedProductID string) error {
+	if s == nil || s.api == nil {
+		return fmt.Errorf("Service Catalog client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if provisionedProductID == "" {
+		return fmt.Errorf("provisioned product ID is required")
+	}
+	token := fmt.Sprintf("terminate-%d", time.Now().UnixNano())
+	input := &servicecatalog.TerminateProvisionedProductInput{
+		ProvisionedProductId: aws.String(provisionedProductID),
+		TerminateToken:       aws.String(token),
+	}
+	_, err := s.api.TerminateProvisionedProduct(ctx, input)
+	if err != nil {
+		return fmt.Errorf("terminate provisioned product: %w", err)
+	}
+	return nil
 }

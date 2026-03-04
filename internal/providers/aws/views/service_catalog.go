@@ -57,7 +57,7 @@ type ServiceCatalogViewModel struct {
 	launchFormIndex  int
 	launchSpinner    spinner.Model
 
-	// Provisioned product action menu (Start, Stop only; no terminate).
+	// Provisioned product action menu (Start, Stop, Terminate).
 	actionMenu         ActionMenu
 	isActionMenuActive bool
 }
@@ -543,6 +543,7 @@ func (m *ServiceCatalogViewModel) buildProvisionedActions() {
 	m.actionMenu = NewActionModal("Provisioned Product", []ActionItem{
 		{Label: "Start", Action: m.startProvisioned},
 		{Label: "Stop", Action: m.stopProvisioned},
+		{Label: "Terminate", Action: m.terminateProvisioned},
 	})
 }
 
@@ -552,6 +553,31 @@ func (m *ServiceCatalogViewModel) startProvisioned() tea.Cmd {
 
 func (m *ServiceCatalogViewModel) stopProvisioned() tea.Cmd {
 	return runStartStopProvisioned(m.app, m.list.SelectedItem(), false)
+}
+
+func (m *ServiceCatalogViewModel) terminateProvisioned() tea.Cmd {
+	return runTerminateProvisioned(m.app, m.list.SelectedItem())
+}
+
+func runTerminateProvisioned(app *app.App, selected list.Item) tea.Cmd {
+	return func() tea.Msg {
+		if app == nil || app.AWS == nil || app.AWS.ServiceCatalog == nil {
+			return ModalResponseMsg{fmt.Errorf("service catalog not initialized")}
+		}
+		prod, ok := selected.(aws.ProvisionedProduct)
+		if !ok || selected == nil {
+			return ModalResponseMsg{fmt.Errorf("no provisioned product selected")}
+		}
+		ctx := app.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		err := app.AWS.ServiceCatalog.TerminateProvisionedProduct(ctx, prod.ID)
+		if err != nil {
+			return ModalResponseMsg{err}
+		}
+		return ModalResponseMsg{nil}
+	}
 }
 
 func runStartStopProvisioned(app *app.App, selected list.Item, start bool) tea.Cmd {
