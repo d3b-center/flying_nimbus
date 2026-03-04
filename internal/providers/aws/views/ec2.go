@@ -480,8 +480,21 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 		}
 	}
 
-	localPort, _ := aws.ValidatePort(values["Local Port"])
-	remotePort, _ := aws.ValidatePort(values["Remote Port"])
+	localPort, err := aws.ValidatePort(values["Local Port"])
+	if err != nil {
+		localPortErr := fmt.Errorf("Invalid local port: %v", err)
+		return func() tea.Msg {
+			return c.ModalResponseMsg{localPortErr}
+		}
+	}
+	remotePort, err := aws.ValidatePort(values["Remote Port"])
+	if err != nil {
+		remotePortErr := fmt.Errorf("Invalid remote port: %v", err)
+		return func() tea.Msg {
+			return c.ModalResponseMsg{remotePortErr}
+		}
+	}
+
 	config := aws.PortForwardConfig{
 		LocalPort:  localPort,
 		RemotePort: remotePort,
