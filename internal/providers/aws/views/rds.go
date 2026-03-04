@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
+	"github.com/rmhubbert/bubbletea-overlay"
 )
 
 var (
@@ -45,6 +46,10 @@ type RdsViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	viewport             viewport.Model
 	isViewportFocused    bool
+	actionMenu           c.ActionMenu
+	isActionMenuActive   bool
+	inputForm            c.InputForm
+	isInputFormActive    bool
 }
 
 func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -137,8 +142,36 @@ func (m RdsViewModel) View() string {
 
 	m.viewport.Style = instanceDetailStyle
 	right := m.viewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return m.handleOverlays(instances)
+}
+
+// Handle any modals over the instance list
+func (m RdsViewModel) handleOverlays(instances string) string {
+	if m.isActionMenuActive {
+		return overlay.Composite(
+			m.actionMenu.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	if m.isInputFormActive {
+		return overlay.Composite(
+			m.inputForm.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -162,6 +195,39 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.sgs = msg
 		m.updateInstanceDetails()
+
+	case c.ModalCancelMsg:
+		m.isActionMenuActive = false
+		return m, nil
+
+	case c.ModalResponseMsg:
+		m.isActionMenuActive = false
+		if msg.Err != nil {
+			slog.Error("Error with modal action", "error", msg.Err)
+		}
+		return m, nil
+
+	case c.InputFormOpenMsg:
+		m.isInputFormActive = true
+		m.isActionMenuActive = false
+
+		// Must be in Update function since ActionMenu callback doesn't return model
+		instance := m.list.SelectedItem().(aws.RDSInstance)
+		m.inputForm = c.NewInputForm(
+			fmt.Sprintf("Port Forward: %s", instance.Id),
+			m.portForwardInputs(),
+			m.portForwardOnSubmit,
+		)
+		return m, nil
+
+	case c.InputFormSubmitMsg:
+		m.isInputFormActive = false
+		return m, msg.OnSubmit(msg.Values)
+
+	case c.InputFormCancelMsg:
+		m.isInputFormActive = false
+		m.isActionMenuActive = true
+		return m, nil
 
 	case tea.KeyMsg:
 		if key.Matches(msg, c.ForceRefresh) {
@@ -187,13 +253,17 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} else {
-		m.inputRoutingStrategy = common.RouteGlobalFirst
-	}
+	m.updateInputRouting()
 	return m, tea.Batch(cmds...)
+}
+
+func (m *RdsViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering || m.isActionMenuActive || m.isInputFormActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
 }
 
 func (m *RdsViewModel) updateInstanceDetails() {
@@ -206,11 +276,25 @@ func (m *RdsViewModel) updateInstanceDetails() {
 }
 
 func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
-
 	var cmd tea.Cmd
+	if m.isInputFormActive {
+		m.inputForm, cmd = m.inputForm.Update(msg)
+		return cmd
+	}
+
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
 
 	if key.Matches(msg, c.ToggleFocus) {
 		m.isViewportFocused = !m.isViewportFocused
+		return nil
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		m.isActionMenuActive = true
+		m.buildActions()
 		return nil
 	}
 
@@ -237,6 +321,40 @@ func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 
 	m.viewport.Height = m.windowSize.Height
 	m.viewport.Width = m.detailsWidth
+}
+
+func (m *RdsViewModel) buildActions() {
+	m.actionMenu = c.NewActionModal("RDS Actions", []c.ActionItem{
+		{Label: "Port Forward", Action: m.portForward},
+	})
+}
+
+func (m RdsViewModel) portForward() tea.Cmd {
+	// Add validation for stopped RDS instances
+
+	m.isInputFormActive = true
+	m.isActionMenuActive = false
+
+	return func() tea.Msg {
+		return c.InputFormOpenMsg{}
+	}
+}
+
+func (m RdsViewModel) portForwardOnSubmit(values c.InputFormResult) tea.Cmd {
+	// Validate for stopped RDS instances again
+
+	// Get local port, remote port, and RDS hostname
+	// TODO get hostname, add hostname to log
+	slog.Info("Starting port forwarding session")
+	return nil
+}
+
+func (m RdsViewModel) portForwardInputs() []c.InputField {
+	// TODO Add validators
+	return []c.InputField{
+		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
+		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+	}
 }
 
 // dbInstancesToItems converts a slice of RDS instances to list.Items.

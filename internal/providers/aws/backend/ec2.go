@@ -10,6 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+const (
+	bastionTag = "bastion"
+)
+
 // Ec2Instance represents an EC2 instance with its metadata.
 type Ec2Instance struct {
 	InstanceID         string
@@ -110,10 +114,26 @@ func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 	return err
 }
 
-// ListInstances retrieves all EC2 instances with pagination.
-func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
+// Get all Bastion host instances
+func (e Ec2Service) GetBastionHosts(ctx context.Context) ([]Ec2Instance, error) {
 	input := ec2.DescribeInstancesInput{}
-	return e.paginatedDescribeInstances(ctx, input)
+	input.Filters = []types.Filter{
+		{
+			Name: aws.String("tag:Name"),
+			Values: []string{bastionTag},
+		},
+	}
+
+	return e.ListInstances(ctx, input)
+}
+
+// ListInstances retrieves all EC2 instances with pagination.
+func (e Ec2Service) ListInstances(ctx context.Context, input ...ec2.DescribeInstancesInput) ([]Ec2Instance, error) {
+	i := ec2.DescribeInstancesInput{}
+	if len(input) > 0 {
+		i = input[0]
+	}
+	return e.paginatedDescribeInstances(ctx, i)
 }
 
 // processPage fetches and processes a single page of EC2 instances.
