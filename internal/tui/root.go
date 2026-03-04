@@ -40,6 +40,7 @@ func InitRoot(appService *app.App) RootModel {
 		stack:          stack,
 		showDevConsole: false,
 		help:           help,
+		isAuthError:    !appService.AWS.LoggedIn,
 	}
 
 	stack = append(stack, NewProvidersModel(appService, m.ContentWindowSize))
@@ -57,6 +58,7 @@ type RootModel struct {
 	ContentWindowSize common.ContentWindowSizeMsg
 	devConsoleHeight  int
 	help              help.Model
+	isAuthError       bool
 }
 
 func (m RootModel) Init() tea.Cmd {
@@ -71,13 +73,17 @@ func (m RootModel) View() string {
 	current := m.stack[len(m.stack)-1]
 	content := current.View()
 
+	if m.isAuthError {
+		return m.renderAuthModal()
+	}
+
 	km := GenerateNimbusKeyMap(current)
 
 	consoleView := m.renderDevConsole()
 
 	help := m.renderHelpMinimal(km)
 
-	main := lipgloss.JoinVertical(lipgloss.Left, renderTitleBar(current, m.WindowSize.Width), content, help, consoleView)
+	main := lipgloss.JoinVertical(lipgloss.Left, m.renderTitleBar(current, m.WindowSize.Width), content, help, consoleView)
 
 	if m.help.ShowAll {
 		return m.renderHelpModal(km)
@@ -86,8 +92,8 @@ func (m RootModel) View() string {
 	return main
 }
 
-func renderTitleBar(m tea.Model, width int) string {
-	nimbus, ok := m.(common.NimbusModel)
+func (m RootModel) renderTitleBar(teaModel tea.Model, width int) string {
+	nimbus, ok := teaModel.(common.NimbusModel)
 	if !ok {
 		return ""
 	}
@@ -102,7 +108,7 @@ func renderTitleBar(m tea.Model, width int) string {
 		Render(title)
 
 	right := lipgloss.NewStyle().
-		Render("prod / us-east-1")
+		Render(m.appService.AWS.Identity.WhoAmI())
 
 	titleBar := lipgloss.JoinHorizontal(lipgloss.Top, left, lipgloss.NewStyle().Width(max(0, width-lipgloss.Width(left)-lipgloss.Width(right)-4)).Render(""),
 		right,
@@ -162,6 +168,27 @@ func (m RootModel) renderDevConsole() string {
 	return common.RenderDevConsole(lines, m.WindowSize.Width, consoleHeight)
 }
 
+func (m RootModel) renderAuthModal() string {
+
+	lines := []string{
+		"We were unable to retrieve AWS credentials.",
+		"The required IAM role could not be assumed.",
+		"",
+		"Please verify that:",
+		"  • You are logged in via AWS SSO",
+		"  • AWS_PROFILE is configured correctly",
+		"  • Your session has not expired",
+		"",
+	}
+
+	return common.RenderErrorModal(
+		"Authentication Required",
+		lines,
+		"Press q to exit",
+		m.WindowSize,
+	)
+}
+
 func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	current := m.stack[len(m.stack)-1]
 
@@ -215,8 +242,8 @@ func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, t
 		return m, nil
 	}
 
-	// When full help is shown, only allow toggling help off and quit
-	if m.help.ShowAll {
+	// When full help is shown or Auth Error, only allow toggling help off and quit
+	if m.help.ShowAll || m.isAuthError {
 		if key.Matches(msg, DefaultKeymap.Quit) {
 			return m, tea.Quit
 		}

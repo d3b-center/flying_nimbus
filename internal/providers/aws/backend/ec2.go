@@ -25,7 +25,7 @@ type Ec2Instance struct {
 	SubnetID           string
 	IamInstanceProfile string
 	LaunchTime         string
-	Volumes            []EbsVolume
+	VolumeIds          []string
 	SecurityGroupIds   []string
 }
 
@@ -95,42 +95,66 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 	return volumes, nil
 }
 
+// StartInstance attempts to start EC2 instance given InstanceId
+func (e Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
+	input := ec2.StartInstancesInput{InstanceIds: []string{instanceId}}
+	_, err := e.api.StartInstances(ctx, &input)
+
+	return err
+}
+
+// StopInstance attempts to stop EC2 instance given InstanceId
+func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
+	input := ec2.StopInstancesInput{InstanceIds: []string{instanceId}}
+	_, err := e.api.StopInstances(ctx, &input)
+
+	return err
+}
+
 // ListInstances retrieves all EC2 instances with pagination.
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
-	var instances []Ec2Instance
-
-	input := &ec2.DescribeInstancesInput{}
-
-	for {
-		hasMore, err := e.processPage(ctx, &instances, input)
-		if err != nil {
-			return nil, err
-		}
-		if !hasMore {
-			break
-		}
-	}
-
-	return instances, nil
+	input := ec2.DescribeInstancesInput{}
+	return e.paginatedDescribeInstances(ctx, input)
 }
 
 // processPage fetches and processes a single page of EC2 instances.
-func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, input *ec2.DescribeInstancesInput) (bool, error) {
-	result, err := e.api.DescribeInstances(ctx, input)
+func (e Ec2Service) paginatedDescribeInstances(ctx context.Context, input ec2.DescribeInstancesInput) ([]Ec2Instance, error) {
+
+	instances := make([]Ec2Instance, 0)
+
+	for {
+		ec2s, nextToken, err := e.fetchEc2Instances(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+
+		instances = append(instances, ec2s...)
+		input.NextToken = &nextToken
+
+		if nextToken == "" {
+			break
+		}
+	}
+	return instances, nil
+}
+
+func (e Ec2Service) fetchEc2Instances(ctx context.Context, input ec2.DescribeInstancesInput) ([]Ec2Instance, string, error) {
+	result, err := e.api.DescribeInstances(ctx, &input)
 	if err != nil {
-		return false, err
+		return nil, "", err
 	}
 
+	instances := make([]Ec2Instance, 0, len(result.Reservations))
 	for _, reservation := range result.Reservations {
 		for _, instance := range reservation.Instances {
 			tagMap, name := extractTags(instance.Tags)
 			securityGroups := extractSecurityGroups(instance.SecurityGroups)
 			iamProfile := extractIamProfile(instance.IamInstanceProfile)
 			launchTime := extractLaunchTime(instance.LaunchTime)
-			volumes := e.getEbsVolumeData(ctx, instance.BlockDeviceMappings)
+			volumes := e.getEbsVolumeIds(instance.BlockDeviceMappings)
 			instanceState := extractInstanceState(instance.State)
 
-			*instances = append(*instances, Ec2Instance{
+			instances = append(instances, Ec2Instance{
 				InstanceID:         aws.ToString(instance.InstanceId),
 				Name:               name,
 				InstanceType:       string(instance.InstanceType),
@@ -142,18 +166,23 @@ func (e Ec2Service) processPage(ctx context.Context, instances *[]Ec2Instance, i
 				SubnetID:           aws.ToString(instance.SubnetId),
 				IamInstanceProfile: iamProfile,
 				LaunchTime:         launchTime,
-				Volumes:            volumes,
+				VolumeIds:          volumes,
 				SecurityGroupIds:   securityGroups,
 			})
 		}
 	}
+	return instances, aws.ToString(result.NextToken), nil
+}
 
-	if result.NextToken != nil {
-		input.NextToken = result.NextToken
-		return true, nil
+// getEbsVolumeData retrieves volume ids for the given block device mappings.
+func (e Ec2Service) getEbsVolumeIds(bdms []types.InstanceBlockDeviceMapping) []string {
+	var volumeIds []string
+	for _, bdm := range bdms {
+		if bdm.Ebs != nil && bdm.Ebs.VolumeId != nil {
+			volumeIds = append(volumeIds, aws.ToString(bdm.Ebs.VolumeId))
+		}
 	}
-
-	return false, nil
+	return volumeIds
 }
 
 // getEbsVolumeData retrieves volume details for the given block device mappings.

@@ -375,6 +375,22 @@ func (s *ServiceCatalogService) getStackARNFromRecord(ctx context.Context, recor
 
 const ec2InstanceResourceType = "AWS::EC2::Instance"
 
+// InstanceIDsForProvisionedProduct returns EC2 instance IDs for a provisioned product using its last successful record (CloudFormation stack).
+// Use this for SSM shell or port-forward when the product backs onto EC2 instances.
+func (s *ServiceCatalogService) InstanceIDsForProvisionedProduct(ctx context.Context, lastSuccessfulRecordID string) ([]string, error) {
+	if s == nil || s.cfn == nil {
+		return nil, fmt.Errorf("Service Catalog or CloudFormation not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stackARN, err := s.getStackARNFromRecord(ctx, lastSuccessfulRecordID)
+	if err != nil {
+		return nil, err
+	}
+	return s.cfn.ListStackResourcePhysicalIDs(ctx, stackARN, ec2InstanceResourceType)
+}
+
 // StartProvisionedProduct starts the EC2 instances underlying the provisioned product. It does not terminate anything.
 func (s *ServiceCatalogService) StartProvisionedProduct(ctx context.Context, _, lastSuccessfulRecordID string) error {
 	if s == nil || s.api == nil {

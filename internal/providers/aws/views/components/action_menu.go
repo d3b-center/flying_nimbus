@@ -1,4 +1,4 @@
-package views
+package components
 
 import (
 	"flying_nimbus/internal/tui/constants"
@@ -9,14 +9,18 @@ import (
 )
 
 var (
-	modalOverlayStyle = lipgloss.NewStyle().
+	// ModalOverlayStyle, ModalTitleStyle, ModalHelpStyle are exported for use by other views (e.g. Service Catalog).
+	ModalOverlayStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("62")).
 				Padding(1, 2)
 
-	modalTitleStyle = lipgloss.NewStyle().
+	ModalTitleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("62"))
+
+	modalOverlayStyle = ModalOverlayStyle
+	modalTitleStyle   = ModalTitleStyle
 
 	modalActiveStyle = lipgloss.NewStyle().
 				Bold(true).
@@ -31,8 +35,10 @@ var (
 				BorderForeground(lipgloss.Color("241")).
 				Padding(0, 2)
 
-	modalHelpStyle = lipgloss.NewStyle().
+	ModalHelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	modalHelpStyle = ModalHelpStyle
 )
 
 type ActionItem struct {
@@ -41,7 +47,7 @@ type ActionItem struct {
 }
 
 type ModalCancelMsg struct{}
-type ModalResponseMsg struct{ err error }
+type ModalResponseMsg struct{ Err error }
 
 type ActionMenu struct {
 	title   string
@@ -103,7 +109,7 @@ func (m *ActionMenu) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	slog.Debug("Action Modal Keypress", "key", msg)
 	var cmd tea.Cmd
 	switch {
-	case key.Matches(msg, rightKey), key.Matches(msg, leftKey):
+	case key.Matches(msg, RightKey), key.Matches(msg, LeftKey):
 		m.moveCursor(msg)
 	case key.Matches(msg, constants.Keymap.Enter):
 		selected := m.actions[m.cursor]
@@ -119,9 +125,9 @@ func (m *ActionMenu) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 
 func (m *ActionMenu) moveCursor(msg tea.KeyMsg) {
 	switch {
-	case key.Matches(msg, rightKey):
+	case key.Matches(msg, RightKey):
 		m.cursor = (m.cursor + 1) % len(m.actions)
-	case key.Matches(msg, leftKey):
+	case key.Matches(msg, LeftKey):
 		m.cursor = (m.cursor - 1 + len(m.actions)) % len(m.actions)
 	}
 }

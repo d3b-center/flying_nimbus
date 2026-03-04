@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type App struct {
@@ -71,12 +73,13 @@ func InitLogger(verbose bool) (*slog.Logger, *LogBuffer, func() error, error) {
 		return nil, nil, nil, err
 	}
 
-	ts := time.Now().UTC().Format("20060102-150405")
-	logPath := filepath.Join(logDir, fmt.Sprintf("flying-nimbus-%s.log", ts))
-
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, nil, nil, err
+	logRotator := &lumberjack.Logger{
+		Filename:   filepath.Join(logDir, "flying-nimbus.log"),
+		MaxSize:    10, // MB
+		MaxBackups: 3,
+		MaxAge:     28, // days
+		Compress:   true,
+		LocalTime:  true,
 	}
 
 	logLevel := slog.LevelInfo
@@ -84,7 +87,7 @@ func InitLogger(verbose bool) (*slog.Logger, *LogBuffer, func() error, error) {
 		logLevel = slog.LevelDebug
 	}
 	buffer := NewLogBuffer()
-	writer := io.MultiWriter(f, buffer)
+	writer := io.MultiWriter(logRotator, buffer)
 	handler := slog.NewTextHandler(writer, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     logLevel,
@@ -107,7 +110,7 @@ func InitLogger(verbose bool) (*slog.Logger, *LogBuffer, func() error, error) {
 
 	// Return a cleanup function so main() can defer it
 	cleanup := func() error {
-		return f.Close()
+		return logRotator.Close()
 	}
 
 	return logger, buffer, cleanup, nil

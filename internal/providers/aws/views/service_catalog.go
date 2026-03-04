@@ -4,6 +4,7 @@ import (
 	"context"
 	"flying_nimbus/internal/app"
 	aws "flying_nimbus/internal/providers/aws/backend"
+	c "flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rmhubbert/bubbletea-overlay"
@@ -51,15 +51,13 @@ type ServiceCatalogViewModel struct {
 	launchArtifact   aws.ProvisioningArtifact
 	launchParams     []aws.ProvisioningParameter
 	artifactList     list.Model
-	launchFormInput  textinput.Model
-	launchFormValues map[string]string
-	launchFormKeys   []string
-	launchFormIndex  int
 	launchSpinner    spinner.Model
 
-	// Provisioned product action menu (Start, Stop, Terminate).
-	actionMenu         ActionMenu
+	// Shared components: action menu and input form (provision form or SSM port forward).
+	actionMenu         c.ActionMenu
 	isActionMenuActive bool
+	inputForm          c.InputForm
+	isInputFormActive  bool
 }
 
 // Launch flow states.
@@ -275,6 +273,16 @@ func (m ServiceCatalogViewModel) View() string {
 			0,
 		)
 	}
+	if m.isInputFormActive && m.launchState == launchIdle {
+		return overlay.Composite(
+			m.inputForm.View(),
+			main,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
 	return main
 }
 
@@ -285,48 +293,14 @@ func (m ServiceCatalogViewModel) renderLaunchOverlay() string {
 		if m.launchState == launchProvisioning {
 			title = "Provisioning..."
 		}
-		return modalOverlayStyle.Render(lipgloss.JoinVertical(lipgloss.Center, modalTitleStyle.Render(title), m.launchSpinner.View()))
+		return c.ModalOverlayStyle.Render(lipgloss.JoinVertical(lipgloss.Center, c.ModalTitleStyle.Render(title), m.launchSpinner.View()))
 	case launchSelectingVersion:
-		return modalOverlayStyle.Render(m.artifactList.View())
+		return c.ModalOverlayStyle.Render(m.artifactList.View())
 	case launchShowingForm:
-		return m.renderProvisionForm()
+		return m.inputForm.View()
 	default:
 		return ""
 	}
-}
-
-func (m ServiceCatalogViewModel) renderProvisionForm() string {
-	header := modalTitleStyle.Render("Provision: " + m.launchProduct.ProductName)
-	rows := []string{header, ""}
-	const maxAllowedShow = 10
-	for i, k := range m.launchFormKeys {
-		label := k
-		if k == "name" {
-			label = "Provisioned product name"
-		}
-		val := m.launchFormValues[k]
-		if i == m.launchFormIndex {
-			rows = append(rows, common.KV(label, m.launchFormInput.View()))
-		} else {
-			display := val
-			if display == "" {
-				display = "(not set)"
-			}
-			rows = append(rows, common.KV(label, display))
-		}
-		// Show allowed values for constrained catalog parameters
-		if k != "name" {
-			if p := paramByKey(m.launchParams, k); p != nil && len(p.AllowedValues) > 0 {
-				show := p.AllowedValues
-				if len(show) > maxAllowedShow {
-					show = append(append([]string{}, show[:maxAllowedShow]...), "...")
-				}
-				rows = append(rows, "  Allowed: "+strings.Join(show, ", "))
-			}
-		}
-	}
-	rows = append(rows, "", modalHelpStyle.Render("tab: next field • shift+tab: prev • ctrl+s: submit • esc: cancel"))
-	return modalOverlayStyle.Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
 func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -355,7 +329,7 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case artifactsLoadedMsg:
 		m.launchState = launchIdle
 		if len(msg.artifacts) == 0 {
-			cmd = tea.Batch(cmd, func() tea.Msg { return ModalResponseMsg{fmt.Errorf("no versions available")} })
+			cmd = tea.Batch(cmd, func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("no versions available")} })
 			break
 		}
 		m.launchArtifacts = msg.artifacts
@@ -369,48 +343,57 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case paramsLoadedMsg:
 		if msg.params == nil {
 			m.launchState = launchIdle
-			cmd = tea.Batch(cmd, func() tea.Msg { return ModalResponseMsg{fmt.Errorf("failed to load parameters")} })
+			cmd = tea.Batch(cmd, func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("failed to load parameters")} })
 			break
 		}
 		m.launchParams = msg.params
-		m.launchFormValues = make(map[string]string)
-		m.launchFormKeys = []string{"name"}
-		for _, p := range msg.params {
-			m.launchFormKeys = append(m.launchFormKeys, p.Key)
-		}
-		m.launchFormValues["name"] = m.launchProduct.ProductName
-		for _, p := range msg.params {
-			m.launchFormValues[p.Key] = p.DefaultValue
-		}
-		m.launchFormIndex = 0
-		ti := textinput.New()
-		ti.Placeholder = "Provisioned product name"
-		ti.SetValue(m.launchFormValues["name"])
-		ti.Width = 40
-		ti.Focus()
-		m.launchFormInput = ti
+		fields := m.provisionFormFields()
+		m.inputForm = c.NewInputForm("Provision: "+m.launchProduct.ProductName, fields, m.provisionOnSubmit)
+		m.isInputFormActive = true
 		m.launchState = launchShowingForm
 	case provisionDoneMsg:
 		m.launchState = launchIdle
 		if msg.err != nil {
-			cmd = tea.Batch(cmd, func() tea.Msg { return ModalResponseMsg{msg.err} })
+			cmd = tea.Batch(cmd, func() tea.Msg { return c.ModalResponseMsg{Err: msg.err} })
 		} else {
 			slog.Info("Provisioning started", "recordID", msg.recordID)
-			cmd = tea.Batch(cmd, func() tea.Msg { return ModalResponseMsg{nil} })
+			cmd = tea.Batch(cmd, func() tea.Msg { return c.ModalResponseMsg{Err: nil} })
 			// Refresh provisioned list when we switch to it
 			m.provisionedItems = nil
 		}
-	case ModalCancelMsg:
+	case c.ModalCancelMsg:
 		m.launchState = launchIdle
 		m.isActionMenuActive = false
+		m.isInputFormActive = false
 		return m, cmd
-	case ModalResponseMsg:
+	case c.InputFormSubmitMsg:
+		m.isInputFormActive = false
+		return m, msg.OnSubmit(msg.Values)
+	case c.InputFormCancelMsg:
+		m.isInputFormActive = false
+		if m.launchState == launchShowingForm {
+			m.launchState = launchIdle
+		} else {
+			m.isActionMenuActive = true
+		}
+		return m, nil
+	case c.InputFormOpenMsg:
+		m.isInputFormActive = true
+		m.isActionMenuActive = false
+		prod := m.list.SelectedItem().(aws.ProvisionedProduct)
+		m.inputForm = c.NewInputForm(
+			"Port Forward: "+prod.Name,
+			m.ssmPortForwardInputs(),
+			m.ssmPortForwardOnSubmit,
+		)
+		return m, nil
+	case c.ModalResponseMsg:
 		if m.launchState != launchIdle {
 			m.launchState = launchIdle
 		}
 		m.isActionMenuActive = false
-		if msg.err != nil {
-			slog.Error("Service catalog action error", "error", msg.err)
+		if msg.Err != nil {
+			slog.Error("Service catalog action error", "error", msg.Err)
 		} else if !m.catalogMode && m.app != nil && m.app.AWS != nil && m.app.AWS.ServiceCatalog != nil {
 			cmd = tea.Batch(cmd, fetchProvisionedProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
 		}
@@ -420,6 +403,13 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Provisioned product action menu consumes input when active
 	if m.isActionMenuActive {
 		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		m.updateInputRouting()
+		return m, cmd
+	}
+
+	// Port forward form (provisioned product) consumes input when active
+	if m.isInputFormActive && m.launchState == launchIdle {
+		m.inputForm, cmd = m.inputForm.Update(msg)
 		m.updateInputRouting()
 		return m, cmd
 	}
@@ -449,10 +439,10 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInputRouting()
 		return m, cmd
 	}
-	if m.launchState == launchShowingForm {
-		formCmd := m.updateLaunchForm(msg)
+	if m.launchState == launchShowingForm && m.isInputFormActive {
+		m.inputForm, cmd = m.inputForm.Update(msg)
 		m.updateInputRouting()
-		return m, formCmd
+		return m, cmd
 	}
 	if m.launchState == launchLoadingArtifacts || m.launchState == launchLoadingParams || m.launchState == launchProvisioning {
 		m.launchSpinner, cmd = m.launchSpinner.Update(msg)
@@ -534,13 +524,15 @@ func (m *ServiceCatalogViewModel) updateInputRouting() {
 	if m.list.FilterState() == list.Filtering {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	}
-	if m.launchState != launchIdle || m.isActionMenuActive {
+	if m.launchState != launchIdle || m.isActionMenuActive || m.isInputFormActive {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	}
 }
 
 func (m *ServiceCatalogViewModel) buildProvisionedActions() {
-	m.actionMenu = NewActionModal("Provisioned Product", []ActionItem{
+	m.actionMenu = c.NewActionModal("Provisioned Product", []c.ActionItem{
+		{Label: "Shell", Action: m.ssmShell},
+		{Label: "Port Forward", Action: m.ssmPortForward},
 		{Label: "Start", Action: m.startProvisioned},
 		{Label: "Stop", Action: m.stopProvisioned},
 		{Label: "Terminate", Action: m.terminateProvisioned},
@@ -559,14 +551,170 @@ func (m *ServiceCatalogViewModel) terminateProvisioned() tea.Cmd {
 	return runTerminateProvisioned(m.app, m.list.SelectedItem())
 }
 
+// provisionFormFields builds InputField slice for the provision form (name + catalog params).
+// Fields are pre-populated with the product name and each parameter's default.
+func (m *ServiceCatalogViewModel) provisionFormFields() []c.InputField {
+	const inputWidth = 44
+	fields := []c.InputField{
+		{
+			Label:       "Provisioned product name",
+			Placeholder: m.launchProduct.ProductName,
+			CharLimit:   128,
+			Value:       m.launchProduct.ProductName,
+			Width:       inputWidth,
+		},
+	}
+	for _, p := range m.launchParams {
+		placeholder := p.DefaultValue
+		if placeholder == "" && len(p.AllowedValues) > 0 {
+			placeholder = p.AllowedValues[0]
+		}
+		fields = append(fields, c.InputField{
+			Label:       p.Key,
+			Placeholder: placeholder,
+			CharLimit:   128,
+			Value:       p.DefaultValue,
+			Width:       inputWidth,
+		})
+	}
+	return fields
+}
+
+// provisionOnSubmit validates form values and runs provision; used as InputForm onSubmit callback.
+func (m *ServiceCatalogViewModel) provisionOnSubmit(values c.InputFormResult) tea.Cmd {
+	name := values["Provisioned product name"]
+	if name == "" {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("provisioned product name is required")} }
+	}
+	params := make(map[string]string)
+	for _, p := range m.launchParams {
+		if v, ok := values[p.Key]; ok {
+			params[p.Key] = v
+		}
+	}
+	for _, p := range m.launchParams {
+		if len(p.AllowedValues) == 0 {
+			continue
+		}
+		val := params[p.Key]
+		var allowed bool
+		for _, a := range p.AllowedValues {
+			if val == a {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			const maxShow = 10
+			show := p.AllowedValues
+			if len(show) > maxShow {
+				show = append(show[:maxShow:maxShow], "...")
+			}
+			errMsg := fmt.Sprintf("%q is not supported for %s. Allowed: %s", val, p.Key, strings.Join(show, ", "))
+			return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("%s", errMsg)} }
+		}
+	}
+	m.launchState = launchProvisioning
+	m.launchSpinner = spinner.New()
+	m.launchSpinner.Style = spinnerStyle
+	m.launchSpinner.Spinner = spinner.Dot
+	return tea.Batch(
+		m.launchSpinner.Tick,
+		provisionProductCmd(m.app.Context, m.app.AWS.ServiceCatalog, m.launchProduct.ProductID, m.launchArtifact.ID, name, params),
+	)
+}
+
+func (m *ServiceCatalogViewModel) validateSsmProvisionedProduct() (aws.ProvisionedProduct, string, error) {
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		return aws.ProvisionedProduct{}, "", fmt.Errorf("no provisioned product selected")
+	}
+	prod, ok := sel.(aws.ProvisionedProduct)
+	if !ok {
+		return aws.ProvisionedProduct{}, "", fmt.Errorf("selected item is not a provisioned product")
+	}
+	recordID := prod.LastSuccessfulRecordID
+	if recordID == "" {
+		return aws.ProvisionedProduct{}, "", fmt.Errorf("no provisioning record for this product")
+	}
+	return prod, recordID, nil
+}
+
+func (m *ServiceCatalogViewModel) ssmShell() tea.Cmd {
+	prod, recordID, err := m.validateSsmProvisionedProduct()
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
+	}
+	instanceIDs, err := m.app.AWS.ServiceCatalog.InstanceIDsForProvisionedProduct(m.app.Context, recordID)
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
+	}
+	if len(instanceIDs) == 0 {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("no EC2 instances found for this product")} }
+	}
+	instanceID := instanceIDs[0]
+	if len(instanceIDs) > 1 {
+		slog.Debug("Multiple instances for provisioned product, using first", "instanceID", instanceID, "product", prod.Name)
+	}
+	command := m.app.AWS.Ssm.BuildSessionCmd(instanceID)
+	return tea.ExecProcess(command, func(err error) tea.Msg {
+		return c.ModalResponseMsg{Err: err}
+	})
+}
+
+func (m *ServiceCatalogViewModel) ssmPortForward() tea.Cmd {
+	_, _, err := m.validateSsmProvisionedProduct()
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
+	}
+	m.isInputFormActive = true
+	m.isActionMenuActive = false
+	return func() tea.Msg { return c.InputFormOpenMsg{} }
+}
+
+func (m *ServiceCatalogViewModel) ssmPortForwardInputs() []c.InputField {
+	return []c.InputField{
+		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
+		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+	}
+}
+
+func (m *ServiceCatalogViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
+	_, recordID, err := m.validateSsmProvisionedProduct()
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
+	}
+	localPort, err := aws.ValidatePort(values["Local Port"])
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("invalid local port: %w", err)} }
+	}
+	remotePort, err := aws.ValidatePort(values["Remote Port"])
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("invalid remote port: %w", err)} }
+	}
+	instanceIDs, err := m.app.AWS.ServiceCatalog.InstanceIDsForProvisionedProduct(m.app.Context, recordID)
+	if err != nil {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
+	}
+	if len(instanceIDs) == 0 {
+		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("no EC2 instances found for this product")} }
+	}
+	instanceID := instanceIDs[0]
+	config := aws.PortForwardConfig{LocalPort: localPort, RemotePort: remotePort}
+	cmd := m.app.AWS.Ssm.BuildPortForwardCmd(instanceID, config)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return c.ModalResponseMsg{Err: err}
+	})
+}
+
 func runTerminateProvisioned(app *app.App, selected list.Item) tea.Cmd {
 	return func() tea.Msg {
 		if app == nil || app.AWS == nil || app.AWS.ServiceCatalog == nil {
-			return ModalResponseMsg{fmt.Errorf("service catalog not initialized")}
+			return c.ModalResponseMsg{Err: fmt.Errorf("service catalog not initialized")}
 		}
 		prod, ok := selected.(aws.ProvisionedProduct)
 		if !ok || selected == nil {
-			return ModalResponseMsg{fmt.Errorf("no provisioned product selected")}
+			return c.ModalResponseMsg{Err: fmt.Errorf("no provisioned product selected")}
 		}
 		ctx := app.Context
 		if ctx == nil {
@@ -574,24 +722,24 @@ func runTerminateProvisioned(app *app.App, selected list.Item) tea.Cmd {
 		}
 		err := app.AWS.ServiceCatalog.TerminateProvisionedProduct(ctx, prod.ID)
 		if err != nil {
-			return ModalResponseMsg{err}
+			return c.ModalResponseMsg{Err: err}
 		}
-		return ModalResponseMsg{nil}
+		return c.ModalResponseMsg{Err: nil}
 	}
 }
 
 func runStartStopProvisioned(app *app.App, selected list.Item, start bool) tea.Cmd {
 	return func() tea.Msg {
 		if app == nil || app.AWS == nil || app.AWS.ServiceCatalog == nil {
-			return ModalResponseMsg{fmt.Errorf("service catalog not initialized")}
+			return c.ModalResponseMsg{Err: fmt.Errorf("service catalog not initialized")}
 		}
 		prod, ok := selected.(aws.ProvisionedProduct)
 		if !ok || selected == nil {
-			return ModalResponseMsg{fmt.Errorf("no provisioned product selected")}
+			return c.ModalResponseMsg{Err: fmt.Errorf("no provisioned product selected")}
 		}
 		recordID := prod.LastSuccessfulRecordID
 		if recordID == "" {
-			return ModalResponseMsg{fmt.Errorf("no provisioning record for this product")}
+			return c.ModalResponseMsg{Err: fmt.Errorf("no provisioning record for this product")}
 		}
 		ctx := app.Context
 		if ctx == nil {
@@ -604,99 +752,10 @@ func runStartStopProvisioned(app *app.App, selected list.Item, start bool) tea.C
 			err = app.AWS.ServiceCatalog.StopProvisionedProduct(ctx, prod.ID, recordID)
 		}
 		if err != nil {
-			return ModalResponseMsg{err}
+			return c.ModalResponseMsg{Err: err}
 		}
-		return ModalResponseMsg{nil}
+		return c.ModalResponseMsg{Err: nil}
 	}
-}
-
-func (m *ServiceCatalogViewModel) updateLaunchForm(msg tea.Msg) tea.Cmd {
-	if len(m.launchFormKeys) == 0 {
-		return nil
-	}
-	currentKey := m.launchFormKeys[m.launchFormIndex]
-
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch {
-		case key.Matches(keyMsg, constants.Keymap.Back):
-			m.launchState = launchIdle
-			return func() tea.Msg { return ModalCancelMsg{} }
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("ctrl+s"))):
-			// Submit
-			m.launchFormValues[currentKey] = m.launchFormInput.Value()
-			name := m.launchFormValues["name"]
-			if name == "" {
-				return func() tea.Msg { return ModalResponseMsg{fmt.Errorf("provisioned product name is required")} }
-			}
-			params := make(map[string]string)
-			for k, v := range m.launchFormValues {
-				if k != "name" {
-					params[k] = v
-				}
-			}
-			// Validate constrained parameters (e.g. instance type) against AllowedValues
-			for _, p := range m.launchParams {
-				if len(p.AllowedValues) == 0 {
-					continue
-				}
-				val := params[p.Key]
-				var allowed bool
-				for _, a := range p.AllowedValues {
-					if val == a {
-						allowed = true
-						break
-					}
-				}
-				if !allowed {
-					const maxShow = 10
-					show := p.AllowedValues
-					if len(show) > maxShow {
-						show = append(show[:maxShow:maxShow], "...")
-					}
-					errMsg := fmt.Sprintf("%q is not supported for %s. Allowed: %s", val, p.Key, strings.Join(show, ", "))
-					return func() tea.Msg { return ModalResponseMsg{fmt.Errorf("%s", errMsg)} }
-				}
-			}
-			m.launchState = launchProvisioning
-			m.launchSpinner = spinner.New()
-			m.launchSpinner.Style = spinnerStyle
-			m.launchSpinner.Spinner = spinner.Dot
-			return tea.Batch(
-				m.launchSpinner.Tick,
-				provisionProductCmd(m.app.Context, m.app.AWS.ServiceCatalog, m.launchProduct.ProductID, m.launchArtifact.ID, name, params),
-			)
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("tab"))):
-			m.launchFormValues[currentKey] = m.launchFormInput.Value()
-			m.launchFormIndex = (m.launchFormIndex + 1) % len(m.launchFormKeys)
-			nextKey := m.launchFormKeys[m.launchFormIndex]
-			m.launchFormInput.SetValue(m.launchFormValues[nextKey])
-			if nextKey == "name" {
-				m.launchFormInput.Placeholder = "Provisioned product name"
-			} else {
-				m.launchFormInput.Placeholder = nextKey
-			}
-			return nil
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("shift+tab"))):
-			m.launchFormValues[currentKey] = m.launchFormInput.Value()
-			m.launchFormIndex = (m.launchFormIndex - 1 + len(m.launchFormKeys)) % len(m.launchFormKeys)
-			nextKey := m.launchFormKeys[m.launchFormIndex]
-			m.launchFormInput.SetValue(m.launchFormValues[nextKey])
-			if nextKey == "name" {
-				m.launchFormInput.Placeholder = "Provisioned product name"
-			} else {
-				m.launchFormInput.Placeholder = nextKey
-			}
-			return nil
-		}
-	}
-
-	var cmd tea.Cmd
-	m.launchFormInput, cmd = m.launchFormInput.Update(msg)
-	// Keep form values in sync when user types
-	if m.launchFormInput.Value() != m.launchFormValues[currentKey] {
-		m.launchFormValues[currentKey] = m.launchFormInput.Value()
-	}
-	return cmd
 }
 
 func (m ServiceCatalogViewModel) Title() string {
