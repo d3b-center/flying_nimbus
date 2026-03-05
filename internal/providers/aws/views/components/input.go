@@ -21,7 +21,7 @@ var (
 			Foreground(lipgloss.Color("196")).
 			Bold(true).
 			Width(14)
-	
+
 	errorPopupStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
 			Bold(true)
@@ -31,7 +31,7 @@ type InputField struct {
 	Label       string
 	Placeholder string
 	CharLimit   int
-	Validator func(string) error
+	Validator   func(string) error
 }
 
 // Temporary struct that passed into parent's OnSubmit function

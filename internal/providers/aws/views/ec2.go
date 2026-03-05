@@ -30,10 +30,10 @@ type (
 )
 
 const (
-	StateRunning InstanceState = "running"
-	StateStopped InstanceState = "stopped"
-	LocalPortLabel string = "Local Port"
-	RemotePortLabel string = "Remote Port"
+	StateRunning    InstanceState = "running"
+	StateStopped    InstanceState = "stopped"
+	LocalPortLabel  string        = "Local Port"
+	RemotePortLabel string        = "Remote Port"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
