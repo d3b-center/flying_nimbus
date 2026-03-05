@@ -331,7 +331,11 @@ func (m *RdsViewModel) buildActions() {
 }
 
 func (m RdsViewModel) portForward() tea.Cmd {
-	// Add validation for stopped RDS instances
+	selectedItem := m.list.SelectedItem()
+	rdsInstance, _ := selectedItem.(aws.RDSInstance)
+	if rdsInstance.Status != "available" {
+		return nil
+	}
 
 	m.isInputFormActive = true
 	m.isActionMenuActive = false
