@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"time"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -11,7 +12,8 @@ import (
 )
 
 const (
-	bastionTag = "bastion"
+	// Bastions are mostly named aws-infra-bastion-ssm-ec2-*, but sometimes Bastion
+	bastionTag = "*astion*"
 )
 
 // Ec2Instance represents an EC2 instance with its metadata.
@@ -115,16 +117,34 @@ func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 }
 
 // Get all Bastion host instances
-func (e Ec2Service) GetBastionHosts(ctx context.Context) ([]Ec2Instance, error) {
+func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Instance, error) {
 	input := ec2.DescribeInstancesInput{}
 	input.Filters = []types.Filter{
+		{
+			Name:   aws.String("vpc-id"),
+			Values: []string{vpcId},
+		},
 		{
 			Name: aws.String("tag:Name"),
 			Values: []string{bastionTag},
 		},
+		{
+			Name:   aws.String("instance-state-name"),
+			Values: []string{"running"},
+		},
 	}
 
-	return e.ListInstances(ctx, input)
+	instances, err := e.ListInstances(ctx, input)
+	if err != nil {
+		return Ec2Instance{}, err
+	}
+
+	count := len(instances)
+	if count != 1 {
+		return Ec2Instance{}, fmt.Errorf("Wrong number of instances found: %s", count)
+	}
+
+	return instances[0], nil
 }
 
 // ListInstances retrieves all EC2 instances with pagination.

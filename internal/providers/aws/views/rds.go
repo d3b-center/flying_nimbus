@@ -8,6 +8,7 @@ import (
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
+	"strconv"
 	"log/slog"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -341,19 +342,49 @@ func (m RdsViewModel) portForward() tea.Cmd {
 }
 
 func (m RdsViewModel) portForwardOnSubmit(values c.InputFormResult) tea.Cmd {
-	// Validate for stopped RDS instances again
+	rdsHostname, bastionId, err := m.getPortForwardInstanceInfo()
+	if err != nil {
+		return func() tea.Msg {
+			return c.ModalResponseMsg{err}
+		}
+	}
 
-	// Get local port, remote port, and RDS hostname
-	// TODO get hostname, add hostname to log
-	slog.Info("Starting port forwarding session")
-	return nil
+	localPort, _ := strconv.Atoi(values[LocalPortLabel])
+	remotePort, _ := strconv.Atoi(values[RemotePortLabel])
+
+	config := aws.PortForwardConfig{
+		LocalPort:  localPort,
+		RemotePort: remotePort,
+		RemoteHost: rdsHostname,
+	}
+
+	slog.Info("Starting port forwarding session", "hostname", rdsHostname, "bastion ID", bastionId)
+	cmd := m.app.AWS.Ssm.BuildRemotePortForwardCmd(bastionId, config)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return SsmSessionFinishedMsg{err}
+	})
+}
+
+// Return the RDS instance's hostname, the bastion EC2 instance's ID, and any errors
+func (m RdsViewModel) getPortForwardInstanceInfo() (string, string, error) {
+	selectedItem := m.list.SelectedItem()
+	rdsInstance, ok := selectedItem.(aws.RDSInstance)
+	if !ok {
+		return "", "", fmt.Errorf("SSM Error: Selected item is not instance")
+	}
+
+	bastion, err := m.app.AWS.Ec2.FindBastionHost(m.app.Context, rdsInstance.VpcID)
+	if err != nil {
+		return "", "", fmt.Errorf("Error getting bastion host", err)
+	}
+
+	return rdsInstance.Endpoint, bastion.InstanceID, nil
 }
 
 func (m RdsViewModel) portForwardInputs() []c.InputField {
-	// TODO Add validators
 	return []c.InputField{
-		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
-		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+		{Label: LocalPortLabel, Placeholder: "10001", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: RemotePortLabel, Placeholder: "5432", CharLimit: 5, Validator: aws.ValidatePort},
 	}
 }
 
