@@ -32,6 +32,8 @@ type (
 const (
 	StateRunning InstanceState = "running"
 	StateStopped InstanceState = "stopped"
+	LocalPortLabel string = "Local Port"
+	RemotePortLabel string = "Remote Port"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -466,8 +468,8 @@ func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 
 func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
-		{Label: "Local Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
-		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: LocalPortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: RemotePortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 	}
 }
 
@@ -481,8 +483,8 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 		}
 	}
 
-	localPort, _ := strconv.Atoi(values["Local Port"])
-	remotePort, _ := strconv.Atoi(values["Remote Port"])
+	localPort, _ := strconv.Atoi(values[LocalPortLabel])
+	remotePort, _ := strconv.Atoi(values[RemotePortLabel])
 
 	config := aws.PortForwardConfig{
 		LocalPort:  localPort,

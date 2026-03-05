@@ -88,9 +88,8 @@ func (m InputForm) Init() tea.Cmd {
 func (m InputForm) Update(msg tea.Msg) (InputForm, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		cmd = m.handleKeypress(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		cmd = m.handleKeypress(keyMsg)
 	}
 
 	return m, cmd
