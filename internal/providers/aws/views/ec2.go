@@ -9,6 +9,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -29,8 +30,10 @@ type (
 )
 
 const (
-	StateRunning InstanceState = "running"
-	StateStopped InstanceState = "stopped"
+	StateRunning    InstanceState = "running"
+	StateStopped    InstanceState = "stopped"
+	LocalPortLabel  string        = "Local Port"
+	RemotePortLabel string        = "Remote Port"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -465,8 +468,8 @@ func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 
 func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
-		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
-		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+		{Label: LocalPortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: RemotePortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 	}
 }
 
@@ -480,20 +483,8 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 		}
 	}
 
-	localPort, err := aws.ValidatePort(values["Local Port"])
-	if err != nil {
-		localPortErr := fmt.Errorf("Invalid local port: %v", err)
-		return func() tea.Msg {
-			return c.ModalResponseMsg{localPortErr}
-		}
-	}
-	remotePort, err := aws.ValidatePort(values["Remote Port"])
-	if err != nil {
-		remotePortErr := fmt.Errorf("Invalid remote port: %v", err)
-		return func() tea.Msg {
-			return c.ModalResponseMsg{remotePortErr}
-		}
-	}
+	localPort, _ := strconv.Atoi(values[LocalPortLabel])
+	remotePort, _ := strconv.Atoi(values[RemotePortLabel])
 
 	config := aws.PortForwardConfig{
 		LocalPort:  localPort,
