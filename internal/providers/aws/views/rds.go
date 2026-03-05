@@ -8,8 +8,8 @@ import (
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
-	"strconv"
 	"log/slog"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -379,7 +379,7 @@ func (m RdsViewModel) getPortForwardInstanceInfo() (string, string, error) {
 
 	bastion, err := m.app.AWS.Ec2.FindBastionHost(m.app.Context, rdsInstance.VpcID)
 	if err != nil {
-		return "", "", fmt.Errorf("Error getting bastion host", err)
+		return "", "", fmt.Errorf("Error getting bastion host: %w", err)
 	}
 
 	return rdsInstance.Endpoint, bastion.InstanceID, nil

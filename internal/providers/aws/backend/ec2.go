@@ -2,9 +2,9 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -125,7 +125,7 @@ func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Insta
 			Values: []string{vpcId},
 		},
 		{
-			Name: aws.String("tag:Name"),
+			Name:   aws.String("tag:Name"),
 			Values: []string{bastionTag},
 		},
 		{
@@ -141,7 +141,7 @@ func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Insta
 
 	count := len(instances)
 	if count != 1 {
-		return Ec2Instance{}, fmt.Errorf("Wrong number of instances found: %s", count)
+		return Ec2Instance{}, fmt.Errorf("Wrong number of instances found: %d", count)
 	}
 
 	return instances[0], nil
