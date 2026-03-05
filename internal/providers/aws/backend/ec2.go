@@ -96,7 +96,7 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 }
 
 // StartInstance attempts to start EC2 instance given InstanceId
-func (e Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
+func (e *Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
 	input := ec2.StartInstancesInput{InstanceIds: []string{instanceId}}
 	_, err := e.api.StartInstances(ctx, &input)
 
@@ -104,7 +104,7 @@ func (e Ec2Service) StartInstance(ctx context.Context, instanceId string) error 
 }
 
 // StopInstance attempts to stop EC2 instance given InstanceId
-func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
+func (e *Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 	input := ec2.StopInstancesInput{InstanceIds: []string{instanceId}}
 	_, err := e.api.StopInstances(ctx, &input)
 
@@ -174,7 +174,7 @@ func (e Ec2Service) fetchEc2Instances(ctx context.Context, input ec2.DescribeIns
 	return instances, aws.ToString(result.NextToken), nil
 }
 
-// getEbsVolumeData retrieves volume ids for the given block device mappings.
+// getEbsVolumeIds retrieves volume IDs for the given block device mappings.
 func (e Ec2Service) getEbsVolumeIds(bdms []types.InstanceBlockDeviceMapping) []string {
 	var volumeIds []string
 	for _, bdm := range bdms {
@@ -183,28 +183,6 @@ func (e Ec2Service) getEbsVolumeIds(bdms []types.InstanceBlockDeviceMapping) []s
 		}
 	}
 	return volumeIds
-}
-
-// getEbsVolumeData retrieves volume details for the given block device mappings.
-func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
-	var volumeIds []string
-	for _, bdm := range bdms {
-		if bdm.Ebs != nil && bdm.Ebs.VolumeId != nil {
-			volumeIds = append(volumeIds, aws.ToString(bdm.Ebs.VolumeId))
-		}
-	}
-
-	var volumes []EbsVolume
-	var err error
-	if len(volumeIds) > 0 {
-		volumes, err = e.GetVolumeDetails(ctx, volumeIds)
-		if err != nil {
-			slog.Warn("Failed to get volume details")
-			volumes = []EbsVolume{}
-		}
-	}
-
-	return volumes
 }
 
 // extractTags converts EC2 tags to a map and extracts the Name tag.

@@ -41,11 +41,12 @@ func (c CallerIdentity) WhoAmI() string {
 	return whoAmI
 }
 
-// Load fetches identity once using STS and parses useful fields.
+// InitCallerIdentity fetches the caller identity once via STS and parses role/session fields.
 func InitCallerIdentity(ctx context.Context, cfg aws.Config) (*CallerIdentity, error) {
 	client := sts.NewFromConfig(cfg)
 
-	timedCtx, _ := context.WithTimeout(ctx, time.Second*3)
+	timedCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
 
 	out, err := client.GetCallerIdentity(timedCtx, &sts.GetCallerIdentityInput{})
 	if err != nil {
