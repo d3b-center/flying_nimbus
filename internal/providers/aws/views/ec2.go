@@ -475,7 +475,6 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 
 // InputForm callback
 func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
-	slog.Debug("OnSubmit function running")
 	instance, err := m.validateSsmInstance()
 	if err != nil {
 		return func() tea.Msg {

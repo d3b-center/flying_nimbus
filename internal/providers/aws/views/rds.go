@@ -9,6 +9,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -18,6 +19,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
+	"github.com/rmhubbert/bubbletea-overlay"
 )
 
 var (
@@ -45,6 +47,10 @@ type RdsViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 	viewport             viewport.Model
 	isViewportFocused    bool
+	actionMenu           c.ActionMenu
+	isActionMenuActive   bool
+	inputForm            c.InputForm
+	isInputFormActive    bool
 }
 
 func (m RdsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -137,8 +143,36 @@ func (m RdsViewModel) View() string {
 
 	m.viewport.Style = instanceDetailStyle
 	right := m.viewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return m.handleOverlays(instances)
+}
+
+// Handle any modals over the instance list
+func (m RdsViewModel) handleOverlays(instances string) string {
+	if m.isActionMenuActive {
+		return overlay.Composite(
+			m.actionMenu.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	if m.isInputFormActive {
+		return overlay.Composite(
+			m.inputForm.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -162,6 +196,39 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.sgs = msg
 		m.updateInstanceDetails()
+
+	case c.ModalCancelMsg:
+		m.isActionMenuActive = false
+		return m, nil
+
+	case c.ModalResponseMsg:
+		m.isActionMenuActive = false
+		if msg.Err != nil {
+			slog.Error("Error with modal action", "error", msg.Err)
+		}
+		return m, nil
+
+	case c.InputFormOpenMsg:
+		m.isInputFormActive = true
+		m.isActionMenuActive = false
+
+		// Must be in Update function since ActionMenu callback doesn't return model
+		instance := m.list.SelectedItem().(aws.RDSInstance)
+		m.inputForm = c.NewInputForm(
+			fmt.Sprintf("Port Forward: %s", instance.Id),
+			m.portForwardInputs(),
+			m.portForwardOnSubmit,
+		)
+		return m, nil
+
+	case c.InputFormSubmitMsg:
+		m.isInputFormActive = false
+		return m, msg.OnSubmit(msg.Values)
+
+	case c.InputFormCancelMsg:
+		m.isInputFormActive = false
+		m.isActionMenuActive = true
+		return m, nil
 
 	case tea.KeyMsg:
 		if key.Matches(msg, c.ForceRefresh) {
@@ -187,13 +254,17 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInstanceDetails()
 	}
 
-	filterState := m.list.FilterState()
-	if filterState == list.Filtering {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
-	} else {
-		m.inputRoutingStrategy = common.RouteGlobalFirst
-	}
+	m.updateInputRouting()
 	return m, tea.Batch(cmds...)
+}
+
+func (m *RdsViewModel) updateInputRouting() {
+	m.inputRoutingStrategy = common.RouteGlobalFirst
+
+	filterState := m.list.FilterState()
+	if filterState == list.Filtering || m.isActionMenuActive || m.isInputFormActive {
+		m.inputRoutingStrategy = common.RouteFocusedFirst
+	}
 }
 
 func (m *RdsViewModel) updateInstanceDetails() {
@@ -206,11 +277,25 @@ func (m *RdsViewModel) updateInstanceDetails() {
 }
 
 func (m *RdsViewModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
-
 	var cmd tea.Cmd
+	if m.isInputFormActive {
+		m.inputForm, cmd = m.inputForm.Update(msg)
+		return cmd
+	}
+
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
 
 	if key.Matches(msg, c.ToggleFocus) {
 		m.isViewportFocused = !m.isViewportFocused
+		return nil
+	}
+
+	if key.Matches(msg, constants.Keymap.Enter) {
+		m.isActionMenuActive = true
+		m.buildActions()
 		return nil
 	}
 
@@ -237,6 +322,74 @@ func (m *RdsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 
 	m.viewport.Height = m.windowSize.Height
 	m.viewport.Width = m.detailsWidth
+}
+
+func (m *RdsViewModel) buildActions() {
+	m.actionMenu = c.NewActionModal("RDS Actions", []c.ActionItem{
+		{Label: "Port Forward", Action: m.portForward},
+	})
+}
+
+func (m RdsViewModel) portForward() tea.Cmd {
+	selectedItem := m.list.SelectedItem()
+	rdsInstance, _ := selectedItem.(aws.RDSInstance)
+	if rdsInstance.Status != "available" {
+		return nil
+	}
+
+	m.isInputFormActive = true
+	m.isActionMenuActive = false
+
+	return func() tea.Msg {
+		return c.InputFormOpenMsg{}
+	}
+}
+
+func (m RdsViewModel) portForwardOnSubmit(values c.InputFormResult) tea.Cmd {
+	rdsHostname, bastionId, err := m.getPortForwardInstanceInfo()
+	if err != nil {
+		return func() tea.Msg {
+			return c.ModalResponseMsg{err}
+		}
+	}
+
+	localPort, _ := strconv.Atoi(values[LocalPortLabel])
+	remotePort, _ := strconv.Atoi(values[RemotePortLabel])
+
+	config := aws.PortForwardConfig{
+		LocalPort:  localPort,
+		RemotePort: remotePort,
+		RemoteHost: rdsHostname,
+	}
+
+	slog.Info("Starting port forwarding session", "hostname", rdsHostname, "bastion ID", bastionId)
+	cmd := m.app.AWS.Ssm.BuildRemotePortForwardCmd(bastionId, config)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return SsmSessionFinishedMsg{err}
+	})
+}
+
+// Return the RDS instance's hostname, the bastion EC2 instance's ID, and any errors
+func (m RdsViewModel) getPortForwardInstanceInfo() (string, string, error) {
+	selectedItem := m.list.SelectedItem()
+	rdsInstance, ok := selectedItem.(aws.RDSInstance)
+	if !ok {
+		return "", "", fmt.Errorf("SSM Error: Selected item is not instance")
+	}
+
+	bastion, err := m.app.AWS.Ec2.FindBastionHost(m.app.Context, rdsInstance.VpcID)
+	if err != nil {
+		return "", "", fmt.Errorf("Error getting bastion host: %w", err)
+	}
+
+	return rdsInstance.Endpoint, bastion.InstanceID, nil
+}
+
+func (m RdsViewModel) portForwardInputs() []c.InputField {
+	return []c.InputField{
+		{Label: LocalPortLabel, Placeholder: "10001", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: RemotePortLabel, Placeholder: "5432", CharLimit: 5, Validator: aws.ValidatePort},
+	}
 }
 
 // dbInstancesToItems converts a slice of RDS instances to list.Items.

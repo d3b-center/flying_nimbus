@@ -57,8 +57,6 @@ func (s *SsmService) BuildSessionCmd(instanceID string) *exec.Cmd {
 		"--region", s.region,
 	}
 	slog.Debug("SSM Command", "args", args)
-	// Clear screen for UX
-	fmt.Print("\033[2J\033[H")
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -78,6 +76,7 @@ func (s *SsmService) BuildPortForwardCmd(instanceID string, config PortForwardCo
 		"--parameters", params,
 		"--region", s.region,
 	}
+	slog.Debug("SSM Command", "args", args)
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -97,6 +96,7 @@ func (s *SsmService) BuildRemotePortForwardCmd(instanceID string, config PortFor
 		"--parameters", params,
 		"--region", s.region,
 	}
+	slog.Debug("SSM Command", "args", args)
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
