@@ -134,7 +134,7 @@ func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Insta
 		},
 	}
 
-	instances, err := e.ListInstances(ctx, input)
+	instances, err := e.ListInstancesWithFilter(ctx, input)
 	if err != nil {
 		return Ec2Instance{}, err
 	}
@@ -147,13 +147,14 @@ func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Insta
 	return instances[0], nil
 }
 
+// ListInstances with an input filter
+func (e Ec2Service) ListInstancesWithFilter(ctx context.Context, input ec2.DescribeInstancesInput) ([]Ec2Instance, error) {
+	return e.paginatedDescribeInstances(ctx, input)
+}
+
 // ListInstances retrieves all EC2 instances with pagination.
-func (e Ec2Service) ListInstances(ctx context.Context, input ...ec2.DescribeInstancesInput) ([]Ec2Instance, error) {
-	i := ec2.DescribeInstancesInput{}
-	if len(input) > 0 {
-		i = input[0]
-	}
-	return e.paginatedDescribeInstances(ctx, i)
+func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
+	return e.paginatedDescribeInstances(ctx, ec2.DescribeInstancesInput{})
 }
 
 // processPage fetches and processes a single page of EC2 instances.
