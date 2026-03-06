@@ -90,6 +90,13 @@ func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSiz
 				return views.InitServiceCatalogViewModel(appService, windowSize)
 			},
 		),
+		common.NewNavItem(
+			"Secrets",
+			"View secrets and parameters tagged to your role",
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return views.InitSecretsViewModel(appService, windowSize)
+			},
+		),
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), windowSize.Width, windowSize.Height)

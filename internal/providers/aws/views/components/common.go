@@ -20,6 +20,10 @@ var (
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
 	)
+	CopySecret = key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "copy password"),
+	)
 	NextField = key.NewBinding(
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "next field"),

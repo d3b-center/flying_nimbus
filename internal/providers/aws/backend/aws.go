@@ -16,6 +16,8 @@ type AwsService struct {
 	Sg             *SgService
 	ServiceCatalog *ServiceCatalogService
 	Ssm            *SsmService
+	Secrets        *SecretsService
+	ParameterStore *ParameterStoreService
 	Identity       *CallerIdentity
 	LoggedIn       bool
 }
@@ -44,6 +46,9 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	ssm := InitSsmService(cfg)
 
+	secrets := InitSecretsService(cfg)
+	parameterStore := InitParameterStoreService(cfg)
+
 	return &AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
@@ -51,6 +56,8 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		Sg:             sg,
 		ServiceCatalog: serviceCatalog,
 		Ssm:            ssm,
+		Secrets:        secrets,
+		ParameterStore: parameterStore,
 		Identity:       identity,
 		LoggedIn:       loggedIn,
 	}, nil
