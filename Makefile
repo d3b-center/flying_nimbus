@@ -31,5 +31,10 @@ build:
 	-trimpath \
 	-ldflags '$(LDFLAGS)' \
 	-o $(BINARY_NAME)
+
+release:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY_NAME)-linux-amd64
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY_NAME)-mac-arm64
+
 test:
 	go test ./...
