@@ -38,18 +38,12 @@ jobs:
           id: find_tag_and_prepare_assets
           run: |
             TAG=$(echo ${{ github.event.pull_request.title }} | sed -E "s/^.*Release (.+\..+\..+)$/\1/g")
-            echo "::set-output name=tag::$TAG"
-            
-            SCRIPT=.github/prepare_assets.sh
-            if [ -f $SCRIPT ]; then 
-                chmod u+x $SCRIPT
-                $SCRIPT $TAG
-            fi
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
 
             ls -al
 
-            mv flying-nimbus-linux-amd64 flying-nimbus-linux-amd64-$TAG
-            mv flying-nimbus-darwin-arm64 flying-nimbus-darwin-arm64-$TAG
+            mv ./flying-nimbus-linux-amd64 ./flying-nimbus-linux-amd64-$TAG
+            mv ./flying-nimbus-darwin-arm64 ./flying-nimbus-darwin-arm64-$TAG
 
             echo "flying-nimbus-linux-amd64-$TAG" >> .github/release_assets.txt
             echo "flying-nimbus-darwin-arm64-$TAG" >> .github/release_assets.txt
