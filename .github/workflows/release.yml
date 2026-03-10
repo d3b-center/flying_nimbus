@@ -32,7 +32,7 @@ jobs:
           run: |
             make release
 
-        - name: Create tag from title and run asset script
+        - name: Create tag from title and rename assets
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           id: find_tag_and_prepare_assets
@@ -43,10 +43,10 @@ jobs:
             ls -al
 
             mv ./flying-nimbus-linux-amd64 ./flying-nimbus-linux-amd64-$TAG
-            mv ./flying-nimbus-darwin-arm64 ./flying-nimbus-darwin-arm64-$TAG
+            mv ./flying-nimbus-mac-arm64 ./flying-nimbus-mac-arm64-$TAG
 
             echo "flying-nimbus-linux-amd64-$TAG" >> .github/release_assets.txt
-            echo "flying-nimbus-darwin-arm64-$TAG" >> .github/release_assets.txt
+            echo "flying-nimbus-mac-arm64-$TAG" >> .github/release_assets.txt
 
         - name: Create Release
           id: create_release
