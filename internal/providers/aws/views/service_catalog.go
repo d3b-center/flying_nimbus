@@ -438,64 +438,10 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Key handling: v = view provisioned, c = catalog, r = refresh, Enter = launch (catalog) or actions (provisioned)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if !m.catalogMode && !m.isLoading() && m.launchState == launchIdle && !m.isActionMenuActive {
-			if key.Matches(keyMsg, constants.Keymap.Enter) {
-				sel := m.list.SelectedItem()
-				if _, ok := sel.(aws.ProvisionedProduct); ok {
-					m.isActionMenuActive = true
-					m.buildProvisionedActions()
-					m.updateInputRouting()
-					return m, nil
-				}
-			}
-		}
-		if m.catalogMode && !m.isLoading() && m.launchState == launchIdle {
-			if key.Matches(keyMsg, keyLaunch) {
-				sel := m.list.SelectedItem()
-				if prod, ok := sel.(aws.Product); ok {
-					m.launchState = launchLoadingArtifacts
-					m.launchProduct = prod
-					m.launchSpinner = spinner.New()
-					m.launchSpinner.Style = spinnerStyle
-					m.launchSpinner.Spinner = spinner.Dot
-					return m, tea.Batch(m.launchSpinner.Tick, fetchArtifactsCmd(m.app.Context, m.app.AWS.ServiceCatalog, prod.ProductID))
-				}
-			}
-		}
-		if m.catalogMode && !m.isLoading() {
-			if key.Matches(keyMsg, keySwitchToProvisioned) {
-				m.catalogMode = false
-				m.setListTitle()
-				m.list.SetItems(m.provisionedItems)
-				if len(m.provisionedItems) == 0 {
-					m.isLoadingProvisioned = true
-					cmd = tea.Batch(cmd, fetchProvisionedProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
-				}
-				return m, tea.Batch(cmd, m.loader.Tick)
-			}
-		} else if !m.catalogMode && !m.isLoading() {
-			if key.Matches(keyMsg, keySwitchToCatalog) {
-				m.catalogMode = true
-				m.setListTitle()
-				m.list.SetItems(m.catalogItems)
-				if len(m.catalogItems) == 0 {
-					m.isLoadingCatalog = true
-					cmd = tea.Batch(cmd, fetchCatalogProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
-				}
-				return m, tea.Batch(cmd, m.loader.Tick)
-			}
-		}
-		if !m.isLoading() {
-			if key.Matches(keyMsg, keyRefresh) {
-				if m.catalogMode {
-					m.isLoadingCatalog = true
-					cmd = tea.Batch(cmd, m.loader.Tick, fetchCatalogProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
-				} else {
-					m.isLoadingProvisioned = true
-					cmd = tea.Batch(cmd, m.loader.Tick, fetchProvisionedProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
-				}
-				return m, cmd
-			}
+		if m.isLoading() {
+			// fall through to list update
+		} else if newM, keyCmd, handled := m.handleKeyWhenNotLoading(keyMsg); handled {
+			return newM, keyCmd
 		}
 	}
 
@@ -534,6 +480,102 @@ func (m *ServiceCatalogViewModel) handleArtifactListKey(keyMsg tea.KeyMsg) (tea.
 		}
 	}
 	return nil, false
+}
+
+// openProvisionedProductActionMenu opens the action menu for the selected provisioned product.
+// Returns true if the selection was a provisioned product and the menu was opened.
+func (m *ServiceCatalogViewModel) openProvisionedProductActionMenu() bool {
+	sel := m.list.SelectedItem()
+	if _, ok := sel.(aws.ProvisionedProduct); !ok {
+		return false
+	}
+	m.isActionMenuActive = true
+	m.buildProvisionedActions()
+	m.updateInputRouting()
+	return true
+}
+
+// startLaunchFromCatalog starts the launch (provision) flow for the selected catalog product.
+// Returns (m, cmd, true) when the selection is a product and the flow was started.
+func (m *ServiceCatalogViewModel) startLaunchFromCatalog() (tea.Model, tea.Cmd, bool) {
+	sel := m.list.SelectedItem()
+	prod, ok := sel.(aws.Product)
+	if !ok {
+		return m, nil, false
+	}
+	m.launchState = launchLoadingArtifacts
+	m.launchProduct = prod
+	m.launchSpinner = spinner.New()
+	m.launchSpinner.Style = spinnerStyle
+	m.launchSpinner.Spinner = spinner.Dot
+	cmd := tea.Batch(m.launchSpinner.Tick, fetchArtifactsCmd(m.app.Context, m.app.AWS.ServiceCatalog, prod.ProductID))
+	return m, cmd, true
+}
+
+// switchToProvisionedView switches list to provisioned products and fetches if empty.
+func (m *ServiceCatalogViewModel) switchToProvisionedView() tea.Cmd {
+	m.catalogMode = false
+	m.setListTitle()
+	m.list.SetItems(m.provisionedItems)
+	if len(m.provisionedItems) == 0 {
+		m.isLoadingProvisioned = true
+		return tea.Batch(m.loader.Tick, fetchProvisionedProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
+	}
+	return m.loader.Tick
+}
+
+// switchToCatalogView switches list to catalog products and fetches if empty.
+func (m *ServiceCatalogViewModel) switchToCatalogView() tea.Cmd {
+	m.catalogMode = true
+	m.setListTitle()
+	m.list.SetItems(m.catalogItems)
+	if len(m.catalogItems) == 0 {
+		m.isLoadingCatalog = true
+		return tea.Batch(m.loader.Tick, fetchCatalogProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
+	}
+	return m.loader.Tick
+}
+
+// refreshCurrentList sets loading state and returns the fetch command for the current mode.
+func (m *ServiceCatalogViewModel) refreshCurrentList() tea.Cmd {
+	if m.catalogMode {
+		m.isLoadingCatalog = true
+		return tea.Batch(m.loader.Tick, fetchCatalogProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
+	}
+	m.isLoadingProvisioned = true
+	return tea.Batch(m.loader.Tick, fetchProvisionedProductsCmd(m.app.Context, m.app.AWS.ServiceCatalog))
+}
+
+// handleKeyWhenNotLoading handles key messages when not loading. Caller must ensure !m.isLoading().
+// Returns (model, cmd, true) when the key was handled so Update can return early.
+func (m *ServiceCatalogViewModel) handleKeyWhenNotLoading(keyMsg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	if m.catalogMode {
+		if m.launchState == launchIdle {
+			if key.Matches(keyMsg, keyLaunch) {
+				if newM, cmd, ok := m.startLaunchFromCatalog(); ok {
+					return newM, cmd, true
+				}
+			}
+		}
+		if key.Matches(keyMsg, keySwitchToProvisioned) {
+			return m, m.switchToProvisionedView(), true
+		}
+	} else {
+		if m.launchState == launchIdle && !m.isActionMenuActive {
+			if key.Matches(keyMsg, constants.Keymap.Enter) {
+				if m.openProvisionedProductActionMenu() {
+					return m, nil, true
+				}
+			}
+		}
+		if key.Matches(keyMsg, keySwitchToCatalog) {
+			return m, m.switchToCatalogView(), true
+		}
+	}
+	if key.Matches(keyMsg, keyRefresh) {
+		return m, m.refreshCurrentList(), true
+	}
+	return m, nil, false
 }
 
 func (m *ServiceCatalogViewModel) buildProvisionedActions() {
