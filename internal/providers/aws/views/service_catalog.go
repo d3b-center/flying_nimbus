@@ -235,6 +235,15 @@ func artifactsToItems(artifacts []aws.ProvisioningArtifact) []list.Item {
 	return out
 }
 
+func newArtifactList(artifacts []aws.ProvisioningArtifact, productName string) list.Model {
+	l := list.New(artifactsToItems(artifacts), list.NewDefaultDelegate(), 20, 10)
+	l.Title = "Select version - " + productName
+	l.SetShowTitle(true)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	return l
+}
+
 func (m ServiceCatalogViewModel) Init() tea.Cmd {
 	slog.Debug("Initialize Service Catalog Model")
 	if m.app == nil || m.app.AWS == nil || m.app.AWS.ServiceCatalog == nil {
@@ -259,31 +268,23 @@ func (m ServiceCatalogViewModel) View() string {
 	right := instanceDetailStyle.Width(m.detailsWidth).MaxHeight(m.windowSize.Height).Render(m.renderDetail())
 	main := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	if m.launchState != launchIdle {
-		overlayContent := m.renderLaunchOverlay()
-		return overlay.Composite(overlayContent, main, overlay.Center, overlay.Center, 0, 0)
-	}
-	if m.isActionMenuActive {
-		return overlay.Composite(
-			m.actionMenu.View(),
-			main,
-			overlay.Center,
-			overlay.Center,
-			0,
-			0,
-		)
-	}
-	if m.isInputFormActive && m.launchState == launchIdle {
-		return overlay.Composite(
-			m.inputForm.View(),
-			main,
-			overlay.Center,
-			overlay.Center,
-			0,
-			0,
-		)
+	if content, ok := m.handleOverlay(); ok {
+		return overlay.Composite(content, main, overlay.Center, overlay.Center, 0, 0)
 	}
 	return main
+}
+
+func (m ServiceCatalogViewModel) handleOverlay() (string, bool) {
+	if m.launchState != launchIdle {
+		return m.renderLaunchOverlay(), true
+	}
+	if m.isActionMenuActive {
+		return m.actionMenu.View(), true
+	}
+	if m.isInputFormActive {
+		return m.inputForm.View(), true
+	}
+	return "", false
 }
 
 func (m ServiceCatalogViewModel) renderLaunchOverlay() string {
@@ -333,12 +334,7 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.launchArtifacts = msg.artifacts
-		artList := list.New(artifactsToItems(msg.artifacts), list.NewDefaultDelegate(), 20, 10)
-		artList.Title = "Select version - " + m.launchProduct.ProductName
-		artList.SetShowTitle(true)
-		artList.SetShowStatusBar(false)
-		artList.SetShowHelp(false)
-		m.artifactList = artList
+		m.artifactList = newArtifactList(msg.artifacts, m.launchProduct.ProductName)
 		m.launchState = launchSelectingVersion
 	case paramsLoadedMsg:
 		if msg.params == nil {
@@ -417,22 +413,8 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Launch flow: version selector or form consumes input
 	if m.launchState == launchSelectingVersion {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			if key.Matches(keyMsg, constants.Keymap.Back) {
-				m.launchState = launchIdle
-				return m, nil
-			}
-			if key.Matches(keyMsg, constants.Keymap.Enter) {
-				sel := m.artifactList.SelectedItem()
-				if sel != nil {
-					if a, ok := sel.(artifactItem); ok {
-						m.launchArtifact = a.ProvisioningArtifact
-						m.launchState = launchLoadingParams
-						m.launchSpinner = spinner.New()
-						m.launchSpinner.Style = spinnerStyle
-						m.launchSpinner.Spinner = spinner.Dot
-						return m, tea.Batch(m.launchSpinner.Tick, fetchParamsCmd(m.app.Context, m.app.AWS.ServiceCatalog, m.launchProduct.ProductID, m.launchArtifact.ID))
-					}
-				}
+			if cmd, handled := m.handleArtifactListKey(keyMsg); handled {
+				return m, cmd
 			}
 		}
 		m.artifactList, cmd = m.artifactList.Update(msg)
@@ -521,12 +503,33 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *ServiceCatalogViewModel) updateInputRouting() {
 	m.inputRoutingStrategy = common.RouteGlobalFirst
-	if m.list.FilterState() == list.Filtering {
+	if m.list.FilterState() == list.Filtering ||
+		m.launchState != launchIdle ||
+		m.isActionMenuActive ||
+		m.isInputFormActive {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	}
-	if m.launchState != launchIdle || m.isActionMenuActive || m.isInputFormActive {
-		m.inputRoutingStrategy = common.RouteFocusedFirst
+}
+
+func (m *ServiceCatalogViewModel) handleArtifactListKey(keyMsg tea.KeyMsg) (tea.Cmd, bool) {
+	if key.Matches(keyMsg, constants.Keymap.Back) {
+		m.launchState = launchIdle
+		return nil, true
 	}
+	if key.Matches(keyMsg, constants.Keymap.Enter) {
+		sel := m.artifactList.SelectedItem()
+		if sel != nil {
+			if a, ok := sel.(artifactItem); ok {
+				m.launchArtifact = a.ProvisioningArtifact
+				m.launchState = launchLoadingParams
+				m.launchSpinner = spinner.New()
+				m.launchSpinner.Style = spinnerStyle
+				m.launchSpinner.Spinner = spinner.Dot
+				return tea.Batch(m.launchSpinner.Tick, fetchParamsCmd(m.app.Context, m.app.AWS.ServiceCatalog, m.launchProduct.ProductID, m.launchArtifact.ID)), true
+			}
+		}
+	}
+	return nil, false
 }
 
 func (m *ServiceCatalogViewModel) buildProvisionedActions() {

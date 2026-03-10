@@ -19,9 +19,6 @@ var (
 			Bold(true).
 			Foreground(lipgloss.Color("62"))
 
-	modalOverlayStyle = ModalOverlayStyle
-	modalTitleStyle   = ModalTitleStyle
-
 	modalActiveStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("170")).
@@ -37,8 +34,6 @@ var (
 
 	ModalHelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
-
-	modalHelpStyle = ModalHelpStyle
 )
 
 type ActionItem struct {
@@ -97,12 +92,12 @@ func (m ActionMenu) View() string {
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,
-		modalTitleStyle.Render(m.title),
+		ModalTitleStyle.Render(m.title),
 		row,
-		modalHelpStyle.Render("←/→: navigate • enter: select • esc: cancel"),
+		ModalHelpStyle.Render("←/→: navigate • enter: select • esc: cancel"),
 	)
 
-	return modalOverlayStyle.Render(content)
+	return ModalOverlayStyle.Render(content)
 }
 
 func (m *ActionMenu) handleKeypress(msg tea.KeyMsg) tea.Cmd {

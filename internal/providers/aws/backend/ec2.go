@@ -96,7 +96,7 @@ func (e Ec2Service) GetVolumeDetails(ctx context.Context, volumeIDs []string) ([
 }
 
 // StartInstance attempts to start EC2 instance given InstanceId
-func (e *Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
+func (e Ec2Service) StartInstance(ctx context.Context, instanceId string) error {
 	input := ec2.StartInstancesInput{InstanceIds: []string{instanceId}}
 	_, err := e.api.StartInstances(ctx, &input)
 
@@ -104,7 +104,7 @@ func (e *Ec2Service) StartInstance(ctx context.Context, instanceId string) error
 }
 
 // StopInstance attempts to stop EC2 instance given InstanceId
-func (e *Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
+func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 	input := ec2.StopInstancesInput{InstanceIds: []string{instanceId}}
 	_, err := e.api.StopInstances(ctx, &input)
 
