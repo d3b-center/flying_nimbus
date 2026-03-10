@@ -46,8 +46,11 @@ jobs:
                 $SCRIPT $TAG
             fi
 
-            echo "flying_nimbus-linux-amd64-${{ github.event.pull_request.title }}" >> .github/release_assets.txt
-            echo "flying_nimbus-darwin-arm64-${{ github.event.pull_request.title }}" >> .github/release_assets.txt
+            mv flying-nimbus-linux-amd64 flying-nimbus-linux-amd64-${{ github.event.pull_request.title }}
+            mv flying-nimbus-darwin-arm64 flying-nimbus-darwin-arm64-${{ github.event.pull_request.title }}
+
+            echo "flying-nimbus-linux-amd64-${{ github.event.pull_request.title }}" >> .github/release_assets.txt
+            echo "flying-nimbus-darwin-arm64-${{ github.event.pull_request.title }}" >> .github/release_assets.txt
 
         - name: Create Release
           id: create_release
