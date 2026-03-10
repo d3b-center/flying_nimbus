@@ -46,6 +46,8 @@ jobs:
                 $SCRIPT $TAG
             fi
 
+            ls -al
+
             mv flying-nimbus-linux-amd64 flying-nimbus-linux-amd64-$TAG
             mv flying-nimbus-darwin-arm64 flying-nimbus-darwin-arm64-$TAG
 
