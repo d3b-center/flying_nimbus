@@ -6,7 +6,7 @@
 **A command-line interface (TUI) tool built in Go to simplify navigation and exploration within your AWS environment.**  This tool aims to provide a more intuitive and focused way to discover resources and services, similar to the `e1s` tool for ECS, but generalized for broader AWS usage.
 
 ### Quickstart
-1. Download the latest [release](https://github.com/d3b-center/flying_nimbus/releases). Set the FN_VERSION to the release version.
+1. Download the latest [release](https://github.com/d3b-center/flying_nimbus/releases). Set `FN_VERSION` to the release version.
 2. Fix the permissions on your download and create a symlink for convenience.
 ```
 FN_VERSION=v1.0.0
@@ -15,7 +15,7 @@ xattr -d com.apple.quarantine ./flying-nimbus-mac-arm64-${FN_VERSION}
 ln -s ./flying-nimbus-mac-arm64-${FN_VERSION} ./flying-nimbus
 ```
 3. Log in to AWS on your terminal. Make sure AWS_REGION is set as well as AWS credentials environment variables.
-4. Run Flying Nimbus to your heart's content!
+4. Ride the Flying Nimbus to your heart's content!
 ```
 ./flying-nimbus
 ```
