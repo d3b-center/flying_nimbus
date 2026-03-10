@@ -35,7 +35,7 @@ type ServiceCatalogViewModel struct {
 	app                  *app.App
 	list                 list.Model
 	loader               spinner.Model
-	catalogMode          bool   // true = catalog products, false = provisioned products
+	catalogMode          bool // true = catalog products, false = provisioned products
 	isLoadingCatalog     bool
 	isLoadingProvisioned bool
 	catalogItems         []list.Item
@@ -46,13 +46,13 @@ type ServiceCatalogViewModel struct {
 	inputRoutingStrategy common.InputRoutingStrategy
 
 	// Launch flow state.
-	launchState      int
-	launchProduct    aws.Product
-	launchArtifacts  []aws.ProvisioningArtifact
-	launchArtifact   aws.ProvisioningArtifact
-	launchParams     []aws.ProvisioningParameter
-	artifactList     list.Model
-	launchSpinner    spinner.Model
+	launchState     int
+	launchProduct   aws.Product
+	launchArtifacts []aws.ProvisioningArtifact
+	launchArtifact  aws.ProvisioningArtifact
+	launchParams    []aws.ProvisioningParameter
+	artifactList    list.Model
+	launchSpinner   spinner.Model
 
 	// Shared components: action menu and input form (provision form or SSM port forward).
 	actionMenu         c.ActionMenu
@@ -63,7 +63,7 @@ type ServiceCatalogViewModel struct {
 
 // Launch flow states.
 const (
-	launchIdle            = iota
+	launchIdle = iota
 	launchLoadingArtifacts
 	launchSelectingVersion
 	launchLoadingParams
@@ -76,7 +76,10 @@ type (
 	catalogProductsLoadedMsg     []list.Item
 	artifactsLoadedMsg           struct{ artifacts []aws.ProvisioningArtifact }
 	paramsLoadedMsg              struct{ params []aws.ProvisioningParameter }
-	provisionDoneMsg             struct{ recordID string; err error }
+	provisionDoneMsg             struct {
+		recordID string
+		err      error
+	}
 )
 
 // artifactItem adapts ProvisioningArtifact for list.Item.
