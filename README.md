@@ -15,6 +15,17 @@ AWS Navigator is designed to be a quick and efficient way to:
 *   **Navigate Resource Types:**  Explore the different resource types available within a specific service.
 *   **(Future Feature) Filter Resources:**  Filter resources based on tags, status, or other attributes (currently under development).
 
+#### Quickstart
+1. Download the latest [release](https://github.com/d3b-center/flying_nimbus/releases)
+2. Log in to AWS on your terminal. Make sure AWS_REGION is set as well as AWS credentials environment variables.
+
+```
+FN_VERSION=v1.0.0
+chmod +x ./flying-nimbus-mac-arm64-${FN_VERSION}
+xattr -d com.apple.quarantine ./flying-nimbus-mac-arm64-${FN_VERSION}
+././flying-nimbus-mac-arm64-${FN_VERSION}
+```
+
 ## 2. Installation
 
 **Prerequisites:**
