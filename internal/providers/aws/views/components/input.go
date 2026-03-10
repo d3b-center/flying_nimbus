@@ -17,17 +17,20 @@ var (
 			Bold(true)
 
 	inputErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
+			Foreground(lipgloss.Color("196")).
+			Bold(true).
+			Width(14)
+
+	errorPopupStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true)
 )
 
 type InputField struct {
 	Label       string
 	Placeholder string
 	CharLimit   int
-	// Value pre-populates the field when non-empty.
-	Value string
-	// Width sets the input width in characters; 0 uses default (20).
-	Width int
+	Validator   func(string) error
 }
 
 // Temporary struct that passed into parent's OnSubmit function
@@ -42,13 +45,11 @@ type InputFormSubmitMsg struct {
 }
 
 type InputForm struct {
-	title         string
-	inputs        []textinput.Model
-	labels        []string
-	labelWidth    int // min width for label column so labels don't wrap
-	cursor        int
-	err           string
-	onSubmit      func(InputFormResult) tea.Cmd
+	title    string
+	inputs   []textinput.Model
+	labels   []string
+	cursor   int
+	onSubmit func(InputFormResult) tea.Cmd
 }
 
 // NewInputForm creates a form with the given fields.
@@ -56,38 +57,26 @@ type InputForm struct {
 func NewInputForm(title string, fields []InputField, onSubmit func(InputFormResult) tea.Cmd) InputForm {
 	inputs := make([]textinput.Model, len(fields))
 	labels := make([]string, len(fields))
-	labelWidth := 14
 
 	for i, f := range fields {
 		ti := textinput.New()
 		ti.Placeholder = f.Placeholder
 		ti.CharLimit = f.CharLimit
-		if f.Width > 0 {
-			ti.Width = f.Width
-		} else {
-			ti.Width = 20
-		}
-		if f.Value != "" {
-			ti.SetValue(f.Value)
-		}
+		ti.Width = 20
+		ti.Validate = f.Validator
 		if i == 0 {
 			ti.Focus()
 		}
 		inputs[i] = ti
 		labels[i] = f.Label
-		// ensure label column fits longest label (label + ":")
-		if w := len(f.Label) + 1; w > labelWidth {
-			labelWidth = w
-		}
 	}
 
 	return InputForm{
-		title:      title,
-		inputs:     inputs,
-		labels:     labels,
-		labelWidth: labelWidth,
-		cursor:     0,
-		onSubmit:   onSubmit,
+		title:    title,
+		inputs:   inputs,
+		labels:   labels,
+		cursor:   0,
+		onSubmit: onSubmit,
 	}
 }
 
@@ -126,13 +115,22 @@ func (m *InputForm) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *InputForm) submit() tea.Cmd {
-	slog.Debug("Form submitted!")
-	m.err = ""
+	var hasErrors bool
+
 	values := make(InputFormResult)
 	for i, input := range m.inputs {
+		if input.Err != nil {
+			hasErrors = true
+			slog.Error(input.Err.Error())
+		}
 		values[m.labels[i]] = input.Value()
 	}
 
+	if hasErrors {
+		return nil
+	}
+
+	slog.Debug("Form submitted!")
 	return func() tea.Msg {
 		return InputFormSubmitMsg{
 			Values:   values,
@@ -163,14 +161,20 @@ func (m InputForm) View() string {
 
 	rows = append(rows, ModalTitleStyle.Render(m.title))
 
-	labelStyle := inputLabelStyle.Width(m.labelWidth)
+	var hasErrors bool
+
 	for i, input := range m.inputs {
-		label := labelStyle.Render(m.labels[i] + ":")
+		style := inputLabelStyle
+		if input.Err != nil {
+			hasErrors = true
+			style = inputErrorStyle
+		}
+		label := style.Render(m.labels[i] + ":")
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Center, label, input.View()))
 	}
 
-	if m.err != "" {
-		rows = append(rows, inputErrorStyle.Render("x "+m.err))
+	if hasErrors {
+		rows = append(rows, errorPopupStyle.Render("\nInput is invalid!\n"))
 	}
 
 	rows = append(rows, ModalHelpStyle.Render("tab/shft+tab: select field • enter: submit • esc: cancel"))

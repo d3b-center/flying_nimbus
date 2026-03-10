@@ -9,6 +9,7 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -555,16 +556,13 @@ func (m *ServiceCatalogViewModel) terminateProvisioned() tea.Cmd {
 }
 
 // provisionFormFields builds InputField slice for the provision form (name + catalog params).
-// Fields are pre-populated with the product name and each parameter's default.
+// Fields use Placeholder to show defaults; main's InputField has no Value/Width.
 func (m *ServiceCatalogViewModel) provisionFormFields() []c.InputField {
-	const inputWidth = 44
 	fields := []c.InputField{
 		{
 			Label:       "Provisioned product name",
 			Placeholder: m.launchProduct.ProductName,
 			CharLimit:   128,
-			Value:       m.launchProduct.ProductName,
-			Width:       inputWidth,
 		},
 	}
 	for _, p := range m.launchParams {
@@ -576,8 +574,6 @@ func (m *ServiceCatalogViewModel) provisionFormFields() []c.InputField {
 			Label:       p.Key,
 			Placeholder: placeholder,
 			CharLimit:   128,
-			Value:       p.DefaultValue,
-			Width:       inputWidth,
 		})
 	}
 	return fields
@@ -677,8 +673,8 @@ func (m *ServiceCatalogViewModel) ssmPortForward() tea.Cmd {
 
 func (m *ServiceCatalogViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
-		{Label: "Local Port", Placeholder: "8080", CharLimit: 5},
-		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5},
+		{Label: "Local Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: "Remote Port", Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 	}
 }
 
@@ -687,14 +683,14 @@ func (m *ServiceCatalogViewModel) ssmPortForwardOnSubmit(values c.InputFormResul
 	if err != nil {
 		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
 	}
-	localPort, err := aws.ValidatePort(values["Local Port"])
-	if err != nil {
+	if err := aws.ValidatePort(values["Local Port"]); err != nil {
 		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("invalid local port: %w", err)} }
 	}
-	remotePort, err := aws.ValidatePort(values["Remote Port"])
-	if err != nil {
+	if err := aws.ValidatePort(values["Remote Port"]); err != nil {
 		return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("invalid remote port: %w", err)} }
 	}
+	localPort, _ := strconv.Atoi(values["Local Port"])
+	remotePort, _ := strconv.Atoi(values["Remote Port"])
 	instanceIDs, err := m.app.AWS.ServiceCatalog.InstanceIDsForProvisionedProduct(m.app.Context, recordID)
 	if err != nil {
 		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }

@@ -11,6 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+const (
+	// Bastions are mostly named aws-infra-bastion-ssm-ec2-*, but sometimes Bastion
+	bastionTag = "*astion*"
+)
+
 // Ec2Instance represents an EC2 instance with its metadata.
 type Ec2Instance struct {
 	InstanceID         string
@@ -111,10 +116,45 @@ func (e Ec2Service) StopInstance(ctx context.Context, instanceId string) error {
 	return err
 }
 
+// Get all Bastion host instances
+func (e Ec2Service) FindBastionHost(ctx context.Context, vpcId string) (Ec2Instance, error) {
+	input := ec2.DescribeInstancesInput{}
+	input.Filters = []types.Filter{
+		{
+			Name:   aws.String("vpc-id"),
+			Values: []string{vpcId},
+		},
+		{
+			Name:   aws.String("tag:Name"),
+			Values: []string{bastionTag},
+		},
+		{
+			Name:   aws.String("instance-state-name"),
+			Values: []string{"running"},
+		},
+	}
+
+	instances, err := e.ListInstancesWithFilter(ctx, input)
+	if err != nil {
+		return Ec2Instance{}, err
+	}
+
+	count := len(instances)
+	if count != 1 {
+		return Ec2Instance{}, fmt.Errorf("Wrong number of instances found: %d", count)
+	}
+
+	return instances[0], nil
+}
+
+// ListInstances with an input filter
+func (e Ec2Service) ListInstancesWithFilter(ctx context.Context, input ec2.DescribeInstancesInput) ([]Ec2Instance, error) {
+	return e.paginatedDescribeInstances(ctx, input)
+}
+
 // ListInstances retrieves all EC2 instances with pagination.
 func (e Ec2Service) ListInstances(ctx context.Context) ([]Ec2Instance, error) {
-	input := ec2.DescribeInstancesInput{}
-	return e.paginatedDescribeInstances(ctx, input)
+	return e.paginatedDescribeInstances(ctx, ec2.DescribeInstancesInput{})
 }
 
 // processPage fetches and processes a single page of EC2 instances.

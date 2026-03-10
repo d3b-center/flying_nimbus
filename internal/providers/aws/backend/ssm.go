@@ -57,8 +57,6 @@ func (s *SsmService) BuildSessionCmd(instanceID string) *exec.Cmd {
 		"--region", s.region,
 	}
 	slog.Debug("SSM Command", "args", args)
-	// Clear screen for UX
-	fmt.Print("\033[2J\033[H")
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -78,6 +76,7 @@ func (s *SsmService) BuildPortForwardCmd(instanceID string, config PortForwardCo
 		"--parameters", params,
 		"--region", s.region,
 	}
+	slog.Debug("SSM Command", "args", args)
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -97,6 +96,7 @@ func (s *SsmService) BuildRemotePortForwardCmd(instanceID string, config PortFor
 		"--parameters", params,
 		"--region", s.region,
 	}
+	slog.Debug("SSM Command", "args", args)
 	cmd := exec.Command("aws", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -105,13 +105,13 @@ func (s *SsmService) BuildRemotePortForwardCmd(instanceID string, config PortFor
 }
 
 // ValidatePort checks if a port string is a valid port number.
-func ValidatePort(port string) (int, error) {
+func ValidatePort(port string) error {
 	p, err := strconv.Atoi(port)
 	if err != nil {
-		return 0, fmt.Errorf("invalid port number: %s", port)
+		return fmt.Errorf("invalid port number: %s", port)
 	}
 	if p < 1 || p > 65535 {
-		return 0, fmt.Errorf("port must be between 1 and 65535, got %d", p)
+		return fmt.Errorf("port must be between 1 and 65535, got %d", p)
 	}
-	return p, nil
+	return nil
 }
