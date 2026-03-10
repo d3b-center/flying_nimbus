@@ -5,17 +5,7 @@
 
 **A command-line interface (TUI) tool built in Go to simplify navigation and exploration within your AWS environment.**  This tool aims to provide a more intuitive and focused way to discover resources and services, similar to the `e1s` tool for ECS, but generalized for broader AWS usage.
 
-## 1. Overview
-
-AWS Navigator is designed to be a quick and efficient way to:
-
-*   **Browse AWS Services:**  Quickly see a list of available AWS services.
-**  EC2, Route53, RDS, Service Catalog, ALB, Amazon Q only supported
-*   **Explore Service Details:**  Get concise information about a selected service, including key services and common configurations.
-*   **Navigate Resource Types:**  Explore the different resource types available within a specific service.
-*   **(Future Feature) Filter Resources:**  Filter resources based on tags, status, or other attributes (currently under development).
-
-#### Quickstart
+### Quickstart
 1. Download the latest [release](https://github.com/d3b-center/flying_nimbus/releases). Set the FN_VERSION to the release version.
 2. Fix the permissions on your download and create a symlink for convenience.
 ```
@@ -29,6 +19,16 @@ ln -s ./flying-nimbus-mac-arm64-${FN_VERSION} ./flying-nimbus
 ```
 ./flying-nimbus
 ```
+
+## 1. Overview
+
+AWS Navigator is designed to be a quick and efficient way to:
+
+*   **Browse AWS Services:**  Quickly see a list of available AWS services.
+**  EC2, Route53, RDS, Service Catalog, ALB, Amazon Q only supported
+*   **Explore Service Details:**  Get concise information about a selected service, including key services and common configurations.
+*   **Navigate Resource Types:**  Explore the different resource types available within a specific service.
+*   **(Future Feature) Filter Resources:**  Filter resources based on tags, status, or other attributes (currently under development).
 
 ## 2. Installation
 
