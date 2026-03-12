@@ -451,7 +451,7 @@ func (m *ServiceCatalogViewModel) delegateToSubmodel(msg tea.Msg) (tea.Model, te
 	if m.launchState == launchLoadingArtifacts || m.launchState == launchLoadingParams || m.launchState == launchProvisioning {
 		m.launchSpinner, cmd = m.launchSpinner.Update(msg)
 		m.updateInputRouting()
-		return m, cmd, true 
+		return m, cmd, true
 	}
 
 	return nil, nil, false
