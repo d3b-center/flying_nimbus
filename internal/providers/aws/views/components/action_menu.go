@@ -9,12 +9,13 @@ import (
 )
 
 var (
-	modalOverlayStyle = lipgloss.NewStyle().
+	// ModalOverlayStyle, ModalTitleStyle, ModalHelpStyle are exported for use by other views (e.g. Service Catalog).
+	ModalOverlayStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("62")).
 				Padding(1, 2)
 
-	modalTitleStyle = lipgloss.NewStyle().
+	ModalTitleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("62"))
 
@@ -31,7 +32,7 @@ var (
 				BorderForeground(lipgloss.Color("241")).
 				Padding(0, 2)
 
-	modalHelpStyle = lipgloss.NewStyle().
+	ModalHelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
 )
 
@@ -91,12 +92,12 @@ func (m ActionMenu) View() string {
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,
-		modalTitleStyle.Render(m.title),
+		ModalTitleStyle.Render(m.title),
 		row,
-		modalHelpStyle.Render("←/→: navigate • enter: select • esc: cancel"),
+		ModalHelpStyle.Render("←/→: navigate • enter: select • esc: cancel"),
 	)
 
-	return modalOverlayStyle.Render(content)
+	return ModalOverlayStyle.Render(content)
 }
 
 func (m *ActionMenu) handleKeypress(msg tea.KeyMsg) tea.Cmd {

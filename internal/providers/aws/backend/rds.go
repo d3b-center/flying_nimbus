@@ -65,11 +65,11 @@ func (s *RdsService) ListDBInstances(ctx context.Context) ([]RDSInstance, error)
 	rawDBInstances, err := s.api.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{})
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to load RDS instances: %v", err)
+		return nil, fmt.Errorf("unable to load RDS instances: %w", err)
 	}
 
 	if rawDBInstances == nil {
-		return nil, fmt.Errorf("Invalid list of dbs return'd")
+		return nil, fmt.Errorf("invalid list of dbs returned")
 	}
 
 	instances := make([]RDSInstance, len(rawDBInstances.DBInstances))

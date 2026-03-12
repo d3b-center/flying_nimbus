@@ -214,7 +214,7 @@ func (e Ec2Service) fetchEc2Instances(ctx context.Context, input ec2.DescribeIns
 	return instances, aws.ToString(result.NextToken), nil
 }
 
-// getEbsVolumeData retrieves volume ids for the given block device mappings.
+// getEbsVolumeIds retrieves volume IDs for the given block device mappings.
 func (e Ec2Service) getEbsVolumeIds(bdms []types.InstanceBlockDeviceMapping) []string {
 	var volumeIds []string
 	for _, bdm := range bdms {
@@ -223,28 +223,6 @@ func (e Ec2Service) getEbsVolumeIds(bdms []types.InstanceBlockDeviceMapping) []s
 		}
 	}
 	return volumeIds
-}
-
-// getEbsVolumeData retrieves volume details for the given block device mappings.
-func (e Ec2Service) getEbsVolumeData(ctx context.Context, bdms []types.InstanceBlockDeviceMapping) []EbsVolume {
-	var volumeIds []string
-	for _, bdm := range bdms {
-		if bdm.Ebs != nil && bdm.Ebs.VolumeId != nil {
-			volumeIds = append(volumeIds, aws.ToString(bdm.Ebs.VolumeId))
-		}
-	}
-
-	var volumes []EbsVolume
-	var err error
-	if len(volumeIds) > 0 {
-		volumes, err = e.GetVolumeDetails(ctx, volumeIds)
-		if err != nil {
-			slog.Warn("Failed to get volume details")
-			volumes = []EbsVolume{}
-		}
-	}
-
-	return volumes
 }
 
 // extractTags converts EC2 tags to a map and extracts the Name tag.
@@ -297,4 +275,44 @@ func extractInstanceState(state *types.InstanceState) string {
 		return string(state.Name)
 	}
 	return ""
+}
+
+// StartInstances starts the given EC2 instances. No-op if instanceIDs is empty.
+func (e *Ec2Service) StartInstances(ctx context.Context, instanceIDs []string) error {
+	if len(instanceIDs) == 0 {
+		return nil
+	}
+	if e == nil || e.api == nil {
+		return fmt.Errorf("EC2 client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ids := make([]string, len(instanceIDs))
+	copy(ids, instanceIDs)
+	_, err := e.api.StartInstances(ctx, &ec2.StartInstancesInput{InstanceIds: ids})
+	if err != nil {
+		return fmt.Errorf("start instances: %w", err)
+	}
+	return nil
+}
+
+// StopInstances stops the given EC2 instances. No-op if instanceIDs is empty.
+func (e *Ec2Service) StopInstances(ctx context.Context, instanceIDs []string) error {
+	if len(instanceIDs) == 0 {
+		return nil
+	}
+	if e == nil || e.api == nil {
+		return fmt.Errorf("EC2 client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ids := make([]string, len(instanceIDs))
+	copy(ids, instanceIDs)
+	_, err := e.api.StopInstances(ctx, &ec2.StopInstancesInput{InstanceIds: ids})
+	if err != nil {
+		return fmt.Errorf("stop instances: %w", err)
+	}
+	return nil
 }

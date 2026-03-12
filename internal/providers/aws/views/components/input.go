@@ -14,8 +14,7 @@ import (
 var (
 	inputLabelStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("62")).
-			Bold(true).
-			Width(14)
+			Bold(true)
 
 	inputErrorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("196")).
@@ -160,7 +159,7 @@ func (m *InputForm) focusCurrent() {
 func (m InputForm) View() string {
 	var rows []string
 
-	rows = append(rows, modalTitleStyle.Render(m.title))
+	rows = append(rows, ModalTitleStyle.Render(m.title))
 
 	var hasErrors bool
 
@@ -178,8 +177,8 @@ func (m InputForm) View() string {
 		rows = append(rows, errorPopupStyle.Render("\nInput is invalid!\n"))
 	}
 
-	rows = append(rows, modalHelpStyle.Render("tab/shft+tab: select field • enter: submit • esc: cancel"))
+	rows = append(rows, ModalHelpStyle.Render("tab/shft+tab: select field • enter: submit • esc: cancel"))
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 
-	return modalOverlayStyle.Render(content)
+	return ModalOverlayStyle.Render(content)
 }
