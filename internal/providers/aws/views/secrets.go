@@ -327,7 +327,7 @@ func (m SecretsViewModel) buildCopyMenu(fields secretFieldsLoadedMsg) c.ActionMe
 		fieldKey := k
 		fieldValue := fields[k]
 		actions = append(actions, c.ActionItem{
-			Label: fieldKey,
+			Label: "Copy " + fieldKey,
 			Action: func() tea.Cmd {
 				return func() tea.Msg {
 					return c.ModalResponseMsg{Err: clipboard.WriteAll(fieldValue)}
@@ -335,7 +335,7 @@ func (m SecretsViewModel) buildCopyMenu(fields secretFieldsLoadedMsg) c.ActionMe
 			},
 		})
 	}
-	return c.NewActionModal("Copy Field", actions)
+	return c.NewActionModal("Secret Value", actions)
 }
 
 func (m SecretsViewModel) View() string {
