@@ -400,47 +400,12 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Provisioned product action menu consumes input when active
-	if m.isActionMenuActive {
-		m.actionMenu, cmd = m.actionMenu.Update(msg)
-		m.updateInputRouting()
-		return m, cmd
+	if dm, dCmd, handled := m.delegateToSubmodel(msg); handled {
+		return dm, dCmd
 	}
 
-	// Port forward form (provisioned product) consumes input when active
-	if m.isInputFormActive && m.launchState == launchIdle {
-		m.inputForm, cmd = m.inputForm.Update(msg)
-		m.updateInputRouting()
-		return m, cmd
-	}
-
-	// Launch flow: version selector or form consumes input
-	if m.launchState == launchSelectingVersion {
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			if cmd, handled := m.handleArtifactListKey(keyMsg); handled {
-				return m, cmd
-			}
-		}
-		m.artifactList, cmd = m.artifactList.Update(msg)
-		m.updateInputRouting()
-		return m, cmd
-	}
-	if m.launchState == launchShowingForm && m.isInputFormActive {
-		m.inputForm, cmd = m.inputForm.Update(msg)
-		m.updateInputRouting()
-		return m, cmd
-	}
-	if m.launchState == launchLoadingArtifacts || m.launchState == launchLoadingParams || m.launchState == launchProvisioning {
-		m.launchSpinner, cmd = m.launchSpinner.Update(msg)
-		m.updateInputRouting()
-		return m, cmd
-	}
-
-	// Key handling: v = view provisioned, c = catalog, r = refresh, Enter = launch (catalog) or actions (provisioned)
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if m.isLoading() {
-			// fall through to list update
-		} else if newM, keyCmd, handled := m.handleKeyWhenNotLoading(keyMsg); handled {
+		if newM, keyCmd, handled := m.handleKeyWhenNotLoading(keyMsg); handled {
 			return newM, keyCmd
 		}
 	}
@@ -449,6 +414,47 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.updateInputRouting()
 
 	return m, cmd
+}
+
+func (m *ServiceCatalogViewModel) delegateToSubmodel(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	var cmd tea.Cmd
+	// Provisioned product action menu consumes input when active
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		m.updateInputRouting()
+		return m, cmd, true
+	}
+
+	// Port forward form (provisioned product) consumes input when active
+	if m.isInputFormActive && m.launchState == launchIdle {
+		m.inputForm, cmd = m.inputForm.Update(msg)
+		m.updateInputRouting()
+		return m, cmd, true
+	}
+
+	// Launch flow: version selector or form consumes input
+	if m.launchState == launchSelectingVersion {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if cmd, handled := m.handleArtifactListKey(keyMsg); handled {
+				return m, cmd, true
+			}
+		}
+		m.artifactList, cmd = m.artifactList.Update(msg)
+		m.updateInputRouting()
+		return m, cmd, true
+	}
+	if m.launchState == launchShowingForm && m.isInputFormActive {
+		m.inputForm, cmd = m.inputForm.Update(msg)
+		m.updateInputRouting()
+		return m, cmd, true
+	}
+	if m.launchState == launchLoadingArtifacts || m.launchState == launchLoadingParams || m.launchState == launchProvisioning {
+		m.launchSpinner, cmd = m.launchSpinner.Update(msg)
+		m.updateInputRouting()
+		return m, cmd, true 
+	}
+
+	return nil, nil, false
 }
 
 func (m *ServiceCatalogViewModel) updateInputRouting() {
@@ -548,7 +554,12 @@ func (m *ServiceCatalogViewModel) refreshCurrentList() tea.Cmd {
 
 // handleKeyWhenNotLoading handles key messages when not loading. Caller must ensure !m.isLoading().
 // Returns (model, cmd, true) when the key was handled so Update can return early.
+// Key handling: v = view provisioned, c = catalog, r = refresh, Enter = launch (catalog) or actions (provisioned)
 func (m *ServiceCatalogViewModel) handleKeyWhenNotLoading(keyMsg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	if m.isLoading() {
+		return nil, nil, false
+	}
+
 	if m.catalogMode {
 		if m.launchState == launchIdle {
 			if key.Matches(keyMsg, keyLaunch) {
@@ -575,7 +586,7 @@ func (m *ServiceCatalogViewModel) handleKeyWhenNotLoading(keyMsg tea.KeyMsg) (te
 	if key.Matches(keyMsg, keyRefresh) {
 		return m, m.refreshCurrentList(), true
 	}
-	return m, nil, false
+	return nil, nil, false
 }
 
 func (m *ServiceCatalogViewModel) buildProvisionedActions() {
