@@ -1,5 +1,17 @@
 # Flying Nimbus Change History
 
+## Release v1.0.0
+
+### Summary
+
+- Emojis: ? x1
+- Categories: Other Changes x1
+
+### New features and changes
+
+- [#22](https://github.com/d3b-center/flying_nimbus/pull/22) -  Service Catalog RW - [f05175cb](https://github.com/d3b-center/flying_nimbus/commit/f05175cba83ba401d1702358f782a81e39ba2780) by [gmd3b](https://github.com/gmd3b)
+
+
 ## Release v0.1.0
 
 ### Summary
