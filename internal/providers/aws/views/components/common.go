@@ -1,9 +1,10 @@
 package components
 
 import (
-	"flying_nimbus/internal/tui/common"
 	"fmt"
 	"log/slog"
+
+	"flying_nimbus/internal/tui/common"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
@@ -46,6 +47,7 @@ const (
 	BorderHeight           = 2 // top + bottom
 	BorderWidth            = 4
 	InstanceListWidthRatio = 0.25
+	SecretsListWidthRatio  = 0.25
 )
 
 // GenerateTagRows takes tags and formats them for rendering

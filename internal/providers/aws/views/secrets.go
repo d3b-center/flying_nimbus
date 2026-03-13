@@ -19,12 +19,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/reflow/wordwrap"
-	"github.com/muesli/reflow/wrap"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
-
-const secretsListWidthRatio = 0.35
 
 // secretSource identifies which backend a SecretItem came from.
 type secretSource int
@@ -59,21 +55,24 @@ func (i SecretItem) FilterValue() string { return i.Title() }
 
 // SecretsViewModel renders secrets from Secrets Manager and Parameter Store combined.
 type SecretsViewModel struct {
-	app                  *app.App
-	list                 list.Model
-	loader               spinner.Model
-	isLoading            bool
-	windowSize           common.ContentWindowSizeMsg
-	listWidth            int
-	detailsWidth         int
-	inputRoutingStrategy common.InputRoutingStrategy
-	viewport             viewport.Model
-	isViewportFocused    bool
-	actionMenu           c.ActionMenu
-	isActionMenuActive   bool
-	// pending counts how many fetch responses are still in flight
-	pending int
-	items   []list.Item
+	app                     *app.App
+	list                    list.Model
+	loader                  spinner.Model
+	isLoading               bool
+	windowSize              common.ContentWindowSizeMsg
+	secretsDetail           string
+	isDetailViewportFocused bool
+	detailViewport          viewport.Model
+	secretsListWidth        int
+	secretsDetailsWidth     int
+	contentHeight           int
+	inputRoutingStrategy    common.InputRoutingStrategy
+	actionMenu              c.ActionMenu
+	isActionMenuActive      bool
+	isInputFormActive       bool
+	inputForm               c.InputForm
+	pending                 int
+	items                   []list.Item
 }
 
 type secretsLoadedMsg struct {
@@ -103,9 +102,8 @@ func InitSecretsViewModel(appService *app.App, windowSize common.ContentWindowSi
 		isLoading:            true,
 		pending:              2,
 		windowSize:           windowSize,
+		detailViewport:       vp,
 		inputRoutingStrategy: common.RouteGlobalFirst,
-		viewport:             vp,
-		isViewportFocused:    false,
 	}
 	m.updateLayout(windowSize)
 	return m
@@ -230,10 +228,10 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pending <= 0 {
 			m.isLoading = false
 			m.list.SetItems(m.items)
-			m.refreshViewport()
 		}
 
 	case secretFieldsLoadedMsg:
+		m.updateSecretDetails()
 		m.isActionMenuActive = true
 		m.actionMenu = m.buildCopyMenu(msg)
 		m.updateInputRouting()
@@ -288,27 +286,25 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 
 		case key.Matches(msg, c.ToggleFocus):
-			m.isViewportFocused = !m.isViewportFocused
+			m.isDetailViewportFocused = !m.isDetailViewportFocused
 			m.updateInputRouting()
 			return m, nil
 		}
-	}
 
-	if m.isViewportFocused {
-		m.viewport, cmd = m.viewport.Update(msg)
-	} else {
-		prevSelected := m.list.Index()
-		m.list, cmd = m.list.Update(msg)
-		if m.list.Index() != prevSelected {
-			m.refreshViewport()
+		if m.isDetailViewportFocused {
+			m.detailViewport, cmd = m.detailViewport.Update(msg)
+		} else {
+			m.list, cmd = m.list.Update(msg)
+			m.updateSecretDetails()
 		}
+		return m, cmd
 	}
 
 	return m, cmd
 }
 
 func (m *SecretsViewModel) updateInputRouting() {
-	if m.isActionMenuActive || m.isViewportFocused {
+	if m.isActionMenuActive || m.isDetailViewportFocused {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst
@@ -343,36 +339,34 @@ func (m SecretsViewModel) View() string {
 		return constants.DocStyle.Render(m.loader.View() + "\n")
 	}
 
-	listBorderColor := c.UnfocusedColor
-	detailBorderColor := c.UnfocusedColor
-	if m.isViewportFocused {
-		detailBorderColor = c.FocusedColor
+	listStyle := common.InstancesListStyle.
+		MaxHeight(m.windowSize.Height)
+
+	detailStyle := common.InstanceDetailStyle.
+		MaxHeight(m.windowSize.Height)
+
+	if m.isDetailViewportFocused {
+		detailStyle = detailStyle.BorderForeground(c.FocusedColor)
+		listStyle = listStyle.BorderForeground(c.UnfocusedColor)
 	} else {
-		listBorderColor = c.FocusedColor
+		listStyle = listStyle.BorderForeground(c.FocusedColor)
+		detailStyle = detailStyle.BorderForeground(c.UnfocusedColor)
 	}
 
-	left := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(listBorderColor).
-		Padding(0, 1).
-		Width(m.listWidth).
-		Height(m.windowSize.Height).
-		Render(m.list.View())
+	m.detailViewport.Style = detailStyle
 
-	right := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(detailBorderColor).
-		Padding(0, 1).
-		Width(m.detailsWidth).
-		Height(m.windowSize.Height).
-		Render(m.viewport.View())
+	left := listStyle.Render(m.list.View())
+	right := m.detailViewport.View()
+	instances := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
-	base := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return m.handleOverlays(instances)
+}
 
+func (m SecretsViewModel) handleOverlays(instances string) string {
 	if m.isActionMenuActive {
 		return overlay.Composite(
 			m.actionMenu.View(),
-			base,
+			instances,
 			overlay.Center,
 			overlay.Center,
 			0,
@@ -380,38 +374,44 @@ func (m SecretsViewModel) View() string {
 		)
 	}
 
-	return base
+	if m.isInputFormActive {
+		return overlay.Composite(
+			m.inputForm.View(),
+			instances,
+			overlay.Center,
+			overlay.Center,
+			0,
+			0,
+		)
+	}
+
+	return instances
 }
 
 func (m *SecretsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	m.windowSize = msg
-	m.listWidth = int(float64(msg.Width) * secretsListWidthRatio)
-	m.detailsWidth = msg.Width - m.listWidth
 
-	viewportWidth := m.detailsWidth - c.BorderWidth
-	viewportHeight := msg.Height - c.BorderHeight
-	if viewportHeight < 0 {
-		viewportHeight = 0
-	}
+	usableWidth := msg.Width - c.BorderWidth
+	usableHeight := msg.Height - c.BorderHeight
 
-	m.list.SetSize(m.listWidth-c.BorderWidth, msg.Height-c.BorderHeight)
-	m.viewport.Width = viewportWidth
-	m.viewport.Height = viewportHeight
-	m.refreshViewport()
+	m.secretsListWidth = int(float64(usableWidth) * c.SecretsListWidthRatio)
+	m.secretsDetailsWidth = usableWidth - m.secretsListWidth
+
+	m.contentHeight = usableHeight
+
+	m.detailViewport.Width = m.secretsDetailsWidth
+	m.detailViewport.Height = msg.Height
+
+	m.list.SetSize(m.secretsDetailsWidth, usableHeight)
 }
 
-func (m *SecretsViewModel) refreshViewport() {
-	content := m.renderDetail()
-	wrapped := wrap.String(wordwrap.String(content, m.viewport.Width), m.viewport.Width)
-	m.viewport.SetContent(wrapped)
-	m.viewport.GotoTop()
+func (m *SecretsViewModel) updateSecretDetails() {
+	m.secretsDetail = generateSecretDetails(m.list.SelectedItem())
+	m.detailViewport.SetContent(m.secretsDetail)
+	m.detailViewport.GotoTop()
 }
 
-func (m SecretsViewModel) renderDetail() string {
-	return generateSecretDetail(m.list.SelectedItem(), m.detailsWidth-c.BorderWidth)
-}
-
-func generateSecretDetail(selectedItem list.Item, width int) string {
+func generateSecretDetails(selectedItem list.Item) string {
 	if selectedItem == nil {
 		return "No secret selected."
 	}
