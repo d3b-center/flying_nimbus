@@ -87,7 +87,8 @@ func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSiz
 			"Service Catalog",
 			"Service Catalog",
 			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
-				return views.InitServiceCatalogViewModel(appService, windowSize)
+				vm := views.InitServiceCatalogViewModel(appService, windowSize)
+				return &vm
 			},
 		),
 		common.NewNavItem(

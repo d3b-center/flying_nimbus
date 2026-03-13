@@ -62,7 +62,7 @@ func InitSgService(cfg aws.Config) *SgService {
 func (s *SgService) DescribeSecurityGroupRules(ctx context.Context, sgIds []string) (map[string]*SecurityGroup, error) {
 	result := make(map[string]*SecurityGroup)
 
-	// TODO: Utilize NewDescribeSecurityGroupsPaginator
+	// Paginator could be used for large SG sets.
 	output, err := s.api.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
 		GroupIds: sgIds,
 	})

@@ -222,15 +222,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case c.InputFormOpenMsg:
 		m.isInputFormActive = true
 		m.isActionMenuActive = false
-
-		// Must be in Update function since ActionMenu callback doesn't return model
-		// TODO see if you can pull this into separate function
-		instance := m.list.SelectedItem().(aws.Ec2Instance)
-		m.inputForm = c.NewInputForm(
-			fmt.Sprintf("Port Forward: %s", instance.Name),
-			m.ssmPortForwardInputs(),
-			m.ssmPortForwardOnSubmit,
-		)
+		m.openPortForwardInputForm()
 		return m, nil
 
 	case c.InputFormSubmitMsg:
@@ -438,15 +430,26 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 
 	if err != nil {
 		return func() tea.Msg {
-			return c.ModalResponseMsg{err}
+			return c.ModalResponseMsg{Err: err}
 		}
 	}
 
 	command := m.app.AWS.Ssm.BuildSessionCmd(instance.InstanceID)
 	return tea.ExecProcess(command, func(err error) tea.Msg {
-		return c.ModalResponseMsg{err}
+		return c.ModalResponseMsg{Err: err}
 	})
 
+}
+
+// openPortForwardInputForm sets the input form for SSM port forward from the selected instance.
+// Called from Update on InputFormOpenMsg because the ActionMenu callback does not return the model.
+func (m *Ec2ViewModel) openPortForwardInputForm() {
+	instance := m.list.SelectedItem().(aws.Ec2Instance)
+	m.inputForm = c.NewInputForm(
+		fmt.Sprintf("Port Forward: %s", instance.Name),
+		m.ssmPortForwardInputs(),
+		m.ssmPortForwardOnSubmit,
+	)
 }
 
 // ActionMenu callback
@@ -454,7 +457,7 @@ func (m *Ec2ViewModel) ssmPortForward() tea.Cmd {
 	_, err := m.validateSsmInstance()
 	if err != nil {
 		return func() tea.Msg {
-			return c.ModalResponseMsg{err}
+			return c.ModalResponseMsg{Err: err}
 		}
 	}
 
@@ -475,11 +478,10 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 
 // InputForm callback
 func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
-	slog.Debug("OnSubmit function running")
 	instance, err := m.validateSsmInstance()
 	if err != nil {
 		return func() tea.Msg {
-			return c.ModalResponseMsg{err}
+			return c.ModalResponseMsg{Err: err}
 		}
 	}
 

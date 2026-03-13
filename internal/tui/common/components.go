@@ -9,7 +9,7 @@ func RenderModal(modalContent string, window tea.WindowSizeMsg) string {
 
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")). // Match your TitleBar color
+		BorderForeground(lipgloss.Color("62")). // Matches title bar accent
 		Padding(1, 2)
 
 	uiWithModal := modalStyle.Render(modalContent)

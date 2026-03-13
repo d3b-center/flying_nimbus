@@ -14,6 +14,7 @@ type AwsService struct {
 	Ec2            *Ec2Service
 	Rds            *RdsService
 	Sg             *SgService
+	CloudFormation *CloudFormationService
 	ServiceCatalog *ServiceCatalogService
 	Ssm            *SsmService
 	Secrets        *SecretsService
@@ -27,7 +28,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to load SDK config: %v", err)
+		return nil, fmt.Errorf("unable to load SDK config: %w", err)
 	}
 
 	identity, err := InitCallerIdentity(ctx, cfg)
@@ -40,20 +41,21 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	ec2 := InitEc2Service(cfg)
 
 	rds := InitRdsService(cfg)
-	serviceCatalog := InitServiceCatalogService(cfg)
 
 	sg := InitSgService(cfg)
-
+	cfn := InitCloudFormationService(cfg)
 	ssm := InitSsmService(cfg)
 
 	secrets := InitSecretsService(cfg)
 	parameterStore := InitParameterStoreService(cfg)
+	serviceCatalog := InitServiceCatalogService(cfg, ec2, cfn)
 
 	return &AwsService{
 		config:         &cfg,
 		Ec2:            ec2,
 		Rds:            rds,
 		Sg:             sg,
+		CloudFormation: cfn,
 		ServiceCatalog: serviceCatalog,
 		Ssm:            ssm,
 		Secrets:        secrets,
