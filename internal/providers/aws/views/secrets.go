@@ -395,11 +395,11 @@ func (m *SecretsViewModel) updateLayout(msg common.ContentWindowSizeMsg) {
 	usableHeight := msg.Height - c.BorderHeight
 
 	m.secretsListWidth = int(float64(usableWidth) * c.SecretsListWidthRatio)
-	m.secretsDetailsWidth = usableWidth - m.secretsListWidth
+	m.secretsDetailsWidth = msg.Width - int(float64(m.secretsListWidth)*c.SecretsListWidthRatio)
 
 	m.contentHeight = usableHeight
-
-	m.detailViewport.Width = m.secretsDetailsWidth
+	// TODO: Hack-y way to adjust the detailViewPort width. Not sure why it is so wonky. This needs to be fixed, but the fix could be redesigning how we calculate widths. We have the same issue in ServiceCatalog
+	m.detailViewport.Width = m.secretsDetailsWidth - 28*c.BorderWidth
 	m.detailViewport.Height = msg.Height
 
 	m.list.SetSize(m.secretsDetailsWidth, usableHeight)
