@@ -257,46 +257,7 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		if m.isActionMenuActive {
-			m.actionMenu, cmd = m.actionMenu.Update(msg)
-			return m, cmd
-		}
-
-		switch {
-		case key.Matches(msg, c.CopySecret):
-			selected := m.list.SelectedItem()
-			if selected == nil {
-				return m, nil
-			}
-			item, ok := selected.(SecretItem)
-			if !ok {
-				return m, nil
-			}
-			return m, fetchSecretFieldsCmd(m.app.Context, m.app, item)
-
-		case key.Matches(msg, c.ForceRefresh):
-			m.isLoading = true
-			m.items = nil
-			m.pending = 2
-			owner := ownerName(m.app.AWS.Identity)
-			slog.Debug(fmt.Sprintf("Owner: %s", owner))
-			return m, tea.Batch(
-				m.loader.Tick,
-				fetchAllSecretsCmd(m.app.Context, m.app, owner),
-			)
-
-		case key.Matches(msg, c.ToggleFocus):
-			m.isDetailViewportFocused = !m.isDetailViewportFocused
-			m.updateInputRouting()
-			return m, nil
-		}
-
-		if m.isDetailViewportFocused {
-			m.detailViewport, cmd = m.detailViewport.Update(msg)
-		} else {
-			m.list, cmd = m.list.Update(msg)
-			m.updateSecretDetails()
-		}
+		cmd = m.handleKeypress(msg)
 		return m, cmd
 	}
 
@@ -467,4 +428,50 @@ func generateSecretDetails(selectedItem list.Item) string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+// handleKeypress processes keyboard input.
+func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
+	if m.isActionMenuActive {
+		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
+
+	switch {
+	case key.Matches(msg, c.CopySecret):
+		selected := m.list.SelectedItem()
+		if selected == nil {
+			return nil
+		}
+		item, ok := selected.(SecretItem)
+		if !ok {
+			return nil
+		}
+		return fetchSecretFieldsCmd(m.app.Context, m.app, item)
+
+	case key.Matches(msg, c.ForceRefresh):
+		m.isLoading = true
+		m.items = nil
+		m.pending = 2
+		owner := ownerName(m.app.AWS.Identity)
+		slog.Debug(fmt.Sprintf("Owner: %s", owner))
+		return tea.Batch(
+			m.loader.Tick,
+			fetchAllSecretsCmd(m.app.Context, m.app, owner),
+		)
+
+	case key.Matches(msg, c.ToggleFocus):
+		m.isDetailViewportFocused = !m.isDetailViewportFocused
+		m.updateInputRouting()
+		return nil
+	}
+
+	if m.isDetailViewportFocused {
+		m.detailViewport, cmd = m.detailViewport.Update(msg)
+	} else {
+		m.list, cmd = m.list.Update(msg)
+		m.updateSecretDetails()
+	}
+	return cmd
 }
