@@ -1,9 +1,10 @@
 package components
 
 import (
-	"flying_nimbus/internal/tui/common"
 	"fmt"
 	"log/slog"
+
+	"flying_nimbus/internal/tui/common"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
@@ -19,6 +20,10 @@ var (
 	ToggleFocus = key.NewBinding(
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "toggle focus"),
+	)
+	CopySecret = key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "copy password"),
 	)
 	NextField = key.NewBinding(
 		key.WithKeys("tab"),
@@ -42,6 +47,7 @@ const (
 	BorderHeight           = 2 // top + bottom
 	BorderWidth            = 4
 	InstanceListWidthRatio = 0.25
+	SecretsListWidthRatio  = 0.25
 )
 
 // GenerateTagRows takes tags and formats them for rendering
