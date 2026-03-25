@@ -1,5 +1,18 @@
 # Flying Nimbus Change History
 
+## Release v1.1.0
+
+### Summary
+
+- Emojis: ? x2
+- Categories: Other Changes x2
+
+### New features and changes
+
+- [#36](https://github.com/d3b-center/flying_nimbus/pull/36) -  :wrench: Added AWS_REGION to the message - [f9e8c0f7](https://github.com/d3b-center/flying_nimbus/commit/f9e8c0f7cdd21dafcf1cd0a42291a6a7eab829c8) by [alubneuski](https://github.com/alubneuski)
+- [#35](https://github.com/d3b-center/flying_nimbus/pull/35) -  User Secrets - [c559448e](https://github.com/d3b-center/flying_nimbus/commit/c559448e1dda642013fdf9d8029e3544722504b6) by [alubneuski](https://github.com/alubneuski)
+
+
 ## Release v1.0.0
 
 ### Summary
