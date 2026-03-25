@@ -1,13 +1,14 @@
 package tui
 
 import (
-	"flying_nimbus/internal/app"
-	"flying_nimbus/internal/tui/common"
-	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
 	"runtime"
 	"time"
+
+	"flying_nimbus/internal/app"
+	"flying_nimbus/internal/tui/common"
+	"flying_nimbus/internal/tui/constants"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -119,11 +120,9 @@ func (m RootModel) renderTitleBar(teaModel tea.Model, width int) string {
 		BorderForeground(lipgloss.Color("62")).
 		Width(width).
 		Render(titleBar)
-
 }
 
 func (m RootModel) renderHelpMinimal(km nimbusKeyMap) string {
-
 	isShowAll := m.help.ShowAll
 
 	m.help.ShowAll = false
@@ -137,7 +136,6 @@ func (m RootModel) renderHelpMinimal(km nimbusKeyMap) string {
 }
 
 func (m RootModel) renderHelpModal(km nimbusKeyMap) string {
-
 	help := m.help.View(km)
 
 	modalContent := lipgloss.JoinVertical(
@@ -150,11 +148,9 @@ func (m RootModel) renderHelpModal(km nimbusKeyMap) string {
 	)
 
 	return common.RenderModal(modalContent, m.WindowSize)
-
 }
 
 func (m RootModel) renderDevConsole() string {
-
 	consoleHeight := m.devConsoleHeight
 	if !m.showDevConsole {
 		consoleHeight = 0
@@ -169,7 +165,6 @@ func (m RootModel) renderDevConsole() string {
 }
 
 func (m RootModel) renderAuthModal() string {
-
 	lines := []string{
 		"We were unable to retrieve AWS credentials.",
 		"The required IAM role could not be assumed.",
@@ -177,6 +172,7 @@ func (m RootModel) renderAuthModal() string {
 		"Please verify that:",
 		"  • You are logged in via AWS SSO",
 		"  • AWS_PROFILE is configured correctly",
+		"  • AWS_REGION  is configured correctly",
 		"  • Your session has not expired",
 		"",
 	}
@@ -412,7 +408,6 @@ func computeLayout(
 	msg tea.WindowSizeMsg,
 	showDevConsole bool,
 ) (common.ContentWindowSizeMsg, int) {
-
 	usableHeight := msg.Height
 	usableWidth := msg.Width
 
