@@ -36,6 +36,7 @@ AWS Navigator is designed to be a quick and efficient way to:
 
 *   Go (1.18 or higher) is required. You can download it from [https://go.dev/dl/](https://go.dev/dl/).
 *   A valid AWS account and configured credentials (IAM user with appropriate permissions - see security considerations below).
+*   To use the tunnel functionality, you must have an EC2 instance deployed with the name tag `bastion`.  Flying Nimbus will connect to this instance via SSM.
 
 **Installation Steps:**
 
