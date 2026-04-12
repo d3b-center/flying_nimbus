@@ -58,6 +58,7 @@ type ProvisioningParameter struct {
 	ParameterType         string
 	ConstraintDescription string
 	AllowedValues         []string
+	Required              bool
 }
 
 // ProvisionedProduct represents a provisioned product as returned by the Service Catalog API.
@@ -304,10 +305,12 @@ func (s *ServiceCatalogService) DescribeProvisioningParameters(ctx context.Conte
 			IsNoEcho:              p.IsNoEcho,
 			ParameterType:         aws.ToString(p.ParameterType),
 			ConstraintDescription: aws.ToString(p.ParameterConstraints.ConstraintDescription),
+			Required:              p.DefaultValue == nil,
 		}
 		if p.ParameterConstraints != nil {
 			param.AllowedValues = p.ParameterConstraints.AllowedValues
 		}
+
 		params = append(params, param)
 	}
 	return params, nil

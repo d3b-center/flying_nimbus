@@ -2,23 +2,23 @@ package views
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"strconv"
+	"time"
+
 	"flying_nimbus/internal/app"
 	aws "flying_nimbus/internal/providers/aws/backend"
 	c "flying_nimbus/internal/providers/aws/views/components"
 	"flying_nimbus/internal/tui/common"
 	"flying_nimbus/internal/tui/constants"
-	"fmt"
-	"log/slog"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/rmhubbert/bubbletea-overlay"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
 
 const serviceCatalogListWidthRatio = 0.25
@@ -100,16 +100,6 @@ func (a artifactItem) Description() string {
 }
 
 func (a artifactItem) FilterValue() string { return a.Name }
-
-// paramByKey returns the ProvisioningParameter for the given key, or nil if not found.
-func paramByKey(params []aws.ProvisioningParameter, key string) *aws.ProvisioningParameter {
-	for i := range params {
-		if params[i].Key == key {
-			return &params[i]
-		}
-	}
-	return nil
-}
 
 // InitServiceCatalogViewModel builds a ServiceCatalogViewModel with default layout (catalog mode by default).
 func InitServiceCatalogViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) ServiceCatalogViewModel {
@@ -622,15 +612,17 @@ func (m *ServiceCatalogViewModel) provisionFormFields() []c.InputField {
 		},
 	}
 	for _, p := range m.launchParams {
-		placeholder := p.DefaultValue
-		if placeholder == "" && len(p.AllowedValues) > 0 {
-			placeholder = p.AllowedValues[0]
+		field := c.InputField{
+			Label:     p.Key,
+			CharLimit: 128,
+			Required:  p.Required,
 		}
-		fields = append(fields, c.InputField{
-			Label:       p.Key,
-			Placeholder: placeholder,
-			CharLimit:   128,
-		})
+		if len(p.AllowedValues) > 0 {
+			field.Options = p.AllowedValues
+		} else if p.DefaultValue != "" {
+			field.Value = p.DefaultValue
+		}
+		fields = append(fields, field)
 	}
 	return fields
 }
@@ -645,28 +637,6 @@ func (m *ServiceCatalogViewModel) provisionOnSubmit(values c.InputFormResult) te
 	for _, p := range m.launchParams {
 		if v, ok := values[p.Key]; ok {
 			params[p.Key] = v
-		}
-	}
-	for _, p := range m.launchParams {
-		if len(p.AllowedValues) == 0 {
-			continue
-		}
-		val := params[p.Key]
-		var allowed bool
-		for _, a := range p.AllowedValues {
-			if val == a {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			const maxShow = 10
-			show := p.AllowedValues
-			if len(show) > maxShow {
-				show = append(show[:maxShow:maxShow], "...")
-			}
-			errMsg := fmt.Sprintf("%q is not supported for %s. Allowed: %s", val, p.Key, strings.Join(show, ", "))
-			return func() tea.Msg { return c.ModalResponseMsg{Err: fmt.Errorf("%s", errMsg)} }
 		}
 	}
 	m.launchState = launchProvisioning
