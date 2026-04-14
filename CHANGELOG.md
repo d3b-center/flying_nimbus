@@ -1,5 +1,18 @@
 # Flying Nimbus Change History
 
+## Release v1.2.0
+
+### Summary
+
+- Emojis: ? x2
+- Categories: Other Changes x2
+
+### New features and changes
+
+- [#40](https://github.com/d3b-center/flying_nimbus/pull/40) -  :wrench: Updated view code to provide default values. Also added additional verifications for inputs - [0c83ab64](https://github.com/d3b-center/flying_nimbus/commit/0c83ab640cb87f250118cf5021f5c3d55658889e) by [alubneuski](https://github.com/alubneuski)
+- [#39](https://github.com/d3b-center/flying_nimbus/pull/39) -  :pencil: Updated REAMDE file - [1efbbe3f](https://github.com/d3b-center/flying_nimbus/commit/1efbbe3fe6d29e8f03258ae7f2164593a6fd7d66) by [alubneuski](https://github.com/alubneuski)
+
+
 ## Release v1.1.0
 
 ### Summary
