@@ -232,10 +232,18 @@ func (m RootModel) handleRuntimeStats() (tea.Model, tea.Cmd) {
 }
 
 func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, tea.Cmd) {
-	// Global help toggle - always handle this first
-	if key.Matches(msg, DefaultKeymap.ShowFullHelp) {
-		m.help.ShowAll = !m.help.ShowAll
-		return m, nil
+	// Determine routing strategy up front — it affects which global keys fire.
+	strategy := m.getInputRoutingStrategy(current)
+
+	// Help toggle: only intercept when global routing is active, OR when the
+	// help overlay is already open (so the user can always dismiss it with ?).
+	// In RouteFocusedFirst mode (e.g. the chat input) ? flows through to the
+	// focused component so the character can be typed normally.
+	if strategy == common.RouteGlobalFirst || m.help.ShowAll {
+		if key.Matches(msg, DefaultKeymap.ShowFullHelp) {
+			m.help.ShowAll = !m.help.ShowAll
+			return m, nil
+		}
 	}
 
 	// When full help is shown or Auth Error, only allow toggling help off and quit
@@ -251,9 +259,6 @@ func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, t
 	if key.Matches(msg, DefaultKeymap.Quit) {
 		return m, tea.Quit
 	}
-
-	// Get routing strategy from current model
-	strategy := m.getInputRoutingStrategy(current)
 
 	// Handle global keys if routing strategy is RouteGlobalFirst
 	if strategy == common.RouteGlobalFirst {

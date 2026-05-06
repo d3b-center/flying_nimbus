@@ -98,6 +98,13 @@ func NewAWSProviderModel(appService *app.App, windowSize common.ContentWindowSiz
 				return views.InitSecretsViewModel(appService, windowSize)
 			},
 		),
+		common.NewNavItem(
+			"DevOps Agent",
+			"AI operations agent for incident response and infrastructure management",
+			func(appService *app.App, windowSize common.ContentWindowSizeMsg) common.NimbusModel {
+				return views.InitDevOpsAgentViewModel(appService, windowSize)
+			},
+		),
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), windowSize.Width, windowSize.Height)

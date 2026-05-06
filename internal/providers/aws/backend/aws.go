@@ -19,6 +19,9 @@ type AwsService struct {
 	Ssm            *SsmService
 	Secrets        *SecretsService
 	ParameterStore *ParameterStoreService
+	Bedrock        *BedrockService
+	DevOpsAgent    *DevOpsAgentService
+	Sfn            *SfnService
 	Identity       *CallerIdentity
 	LoggedIn       bool
 }
@@ -39,15 +42,15 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 
 	slog.Info(fmt.Sprintf("AWS Region: %s", cfg.Region))
 	ec2 := InitEc2Service(cfg)
-
 	rds := InitRdsService(cfg)
-
 	sg := InitSgService(cfg)
 	cfn := InitCloudFormationService(cfg)
 	ssm := InitSsmService(cfg)
-
 	secrets := InitSecretsService(cfg)
 	parameterStore := InitParameterStoreService(cfg)
+	bedrockSvc := InitBedrockService(cfg)
+	devOpsAgent := InitDevOpsAgentService(cfg)
+	sfnSvc := InitSfnService(cfg)
 	serviceCatalog := InitServiceCatalogService(cfg, ec2, cfn)
 
 	return &AwsService{
@@ -60,8 +63,10 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		Ssm:            ssm,
 		Secrets:        secrets,
 		ParameterStore: parameterStore,
+		Bedrock:        bedrockSvc,
+		DevOpsAgent:    devOpsAgent,
+		Sfn:            sfnSvc,
 		Identity:       identity,
 		LoggedIn:       loggedIn,
 	}, nil
-
 }
