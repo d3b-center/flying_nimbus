@@ -24,6 +24,8 @@ github.com/aws/aws-sdk-go-v2/service/devopsagent v1.3.2 h1:BQ4nhnUE9CrMpc5oeuijZ
 github.com/aws/aws-sdk-go-v2/service/devopsagent v1.3.2/go.mod h1:QmrrmO/P7VfCf68eQbY+kXL+ZuyUjbAUs82sKOHw14c=
 github.com/aws/aws-sdk-go-v2/service/ec2 v1.282.0 h1:zA/bET82SukDQOk6+xRakBxS0anZcxAoH0yzAXz2RDk=
 github.com/aws/aws-sdk-go-v2/service/ec2 v1.282.0/go.mod h1:Uy+C+Sc58jozdoL1McQr8bDsEvNFx+/nBY+vpO1HVUY=
+github.com/aws/aws-sdk-go-v2/service/emr v1.59.2 h1:BR7dPfnYULtw1QMLTb4p67A5O7cOhwsRh6arvYQFIQg=
+github.com/aws/aws-sdk-go-v2/service/emr v1.59.2/go.mod h1:cWxbjdU0/WUkpKZ+k03XbZiC5b8OVjCRzQ4wJlnO0Q4=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4 h1:0ryTNEdJbzUCEWkVXEXoqlXV72J5keC1GvILMOuD00E=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4/go.mod h1:HQ4qwNZh32C3CBeO6iJLQlgtMzqeG17ziAA/3KDJFow=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.17 h1:RuNSMoozM8oXlgLG/n6WLaFGoea7/CddrCfIiSA+xdY=

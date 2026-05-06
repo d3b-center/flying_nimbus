@@ -22,6 +22,7 @@ type AwsService struct {
 	Bedrock        *BedrockService
 	DevOpsAgent    *DevOpsAgentService
 	Sfn            *SfnService
+	Emr            *EmrService
 	Identity       *CallerIdentity
 	LoggedIn       bool
 }
@@ -51,6 +52,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	bedrockSvc := InitBedrockService(cfg)
 	devOpsAgent := InitDevOpsAgentService(cfg)
 	sfnSvc := InitSfnService(cfg)
+	emrSvc := InitEmrService(cfg)
 	serviceCatalog := InitServiceCatalogService(cfg, ec2, cfn)
 
 	return &AwsService{
@@ -66,6 +68,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		Bedrock:        bedrockSvc,
 		DevOpsAgent:    devOpsAgent,
 		Sfn:            sfnSvc,
+		Emr:            emrSvc,
 		Identity:       identity,
 		LoggedIn:       loggedIn,
 	}, nil

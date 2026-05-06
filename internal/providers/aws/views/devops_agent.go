@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"flying_nimbus/internal/app"
 	aws "flying_nimbus/internal/providers/aws/backend"
@@ -82,6 +83,9 @@ const (
 
 const devOpsInputRows = 3
 
+// devOpsAgentCostPerSecond is the AWS DevOps Agent billing rate in USD.
+const devOpsAgentCostPerSecond = 0.00083
+
 // ── key bindings ──────────────────────────────────────────────────────────────
 
 var devOpsSendKey = key.NewBinding(
@@ -116,6 +120,10 @@ var (
 
 	devOpsDimStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
+
+	devOpsCostStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243")).
+			Italic(true)
 )
 
 // ── chat history entry ────────────────────────────────────────────────────────
@@ -146,6 +154,11 @@ type DevOpsAgentViewModel struct {
 	spinner               spinner.Model
 	isSending             bool
 
+	// Usage tracking
+	queryStartTime time.Time
+	totalDuration  time.Duration
+	queryCount     int
+
 	// Port-forward form (reuses the same InputForm component as ec2.go)
 	inputForm             c.InputForm
 	isInputFormActive     bool
@@ -162,7 +175,7 @@ func InitDevOpsAgentViewModel(appService *app.App, windowSize common.ContentWind
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
 
 	ti := textinput.New()
-	ti.Placeholder = "Ask a question or type #shell / #tunnel..."
+	ti.Placeholder = "Ask a question or type #help for commands..."
 	ti.CharLimit = 2048
 	ti.Width = max(1, windowSize.Width-4)
 
@@ -403,12 +416,17 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentChatResponseMsg:
 		m.isSending = false
+		elapsed := time.Since(m.queryStartTime)
+		m.totalDuration += elapsed
+		m.queryCount++
 		if msg.err != nil {
 			m.appendMsg("agent", fmt.Sprintf("[error: %v — please try again]", msg.err))
 		} else if msg.result != nil {
 			m.executionId = msg.result.ExecutionId
 			m.appendMsg("agent", msg.result.Response)
 		}
+		cost := elapsed.Seconds() * devOpsAgentCostPerSecond
+		m.appendMsg("cost", fmt.Sprintf("%.1fs · $%.5f", elapsed.Seconds(), cost))
 		m.syncViewport()
 		m.viewport.GotoBottom()
 		return m, nil
@@ -603,6 +621,7 @@ func (m DevOpsAgentViewModel) enterChat(space aws.AgentSpace) (DevOpsAgentViewMo
 func (m DevOpsAgentViewModel) sendToAgent(text string) (DevOpsAgentViewModel, tea.Cmd) {
 	m.appendMsg("user", text)
 	m.isSending = true
+	m.queryStartTime = time.Now()
 	execId := m.executionId
 	space := m.selectedSpace
 	m.syncViewport()
@@ -725,6 +744,47 @@ func (m DevOpsAgentViewModel) handleHashCommand(input string) (DevOpsAgentViewMo
 			return listResultMsg{content: formatSFNExecutions(machine.Name, execs)}
 		})
 
+	case "listemr":
+		m.appendMsg("system", "Fetching EMR clusters...")
+		m.isSending = true
+		m.syncViewport()
+		m.viewport.GotoBottom()
+		ctx := m.app.Context
+		emrSvc := m.app.AWS.Emr
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+			clusters, err := emrSvc.ListClusters(ctx)
+			if err != nil {
+				return listResultMsg{err: err}
+			}
+			return listResultMsg{content: formatEMRList(clusters)}
+		})
+
+	case "listemrjobs":
+		if len(args) == 0 {
+			m.appendMsg("system", "Usage: #listemrjobs <cluster-name>")
+			m.syncViewport()
+			m.viewport.GotoBottom()
+			return m, nil
+		}
+		name := strings.Join(args, " ")
+		m.appendMsg("system", fmt.Sprintf("Fetching steps for cluster %q...", name))
+		m.isSending = true
+		m.syncViewport()
+		m.viewport.GotoBottom()
+		ctx := m.app.Context
+		emrSvc := m.app.AWS.Emr
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+			cluster, err := emrSvc.FindClusterByName(ctx, name)
+			if err != nil {
+				return listResultMsg{err: err}
+			}
+			steps, err := emrSvc.ListSteps(ctx, cluster.Id)
+			if err != nil {
+				return listResultMsg{err: err}
+			}
+			return listResultMsg{content: formatEMRSteps(cluster.Name, steps)}
+		})
+
 	case "help":
 		m.appendMsg("system", devOpsHelpText())
 		m.syncViewport()
@@ -753,15 +813,24 @@ func (m *DevOpsAgentViewModel) replaceLastMsg(role, content string) {
 
 func devOpsHelpText() string {
 	return "Available commands:\n" +
+		"\n" +
+		"  Connectivity\n" +
 		"  #shell <instance>              — open an SSM shell session\n" +
 		"  #tunnel <ec2-or-rds-name>      — port forwarding; EC2 direct, RDS via bastion\n" +
-		"  #listec2instances              — list EC2 instances (name + ID + state)\n" +
-		"  #listrdsinstances              — list RDS instances (ID + engine + endpoint)\n" +
+		"\n" +
+		"  Compute\n" +
+		"  #listec2instances              — list EC2 instances with name, ID, and state\n" +
+		"  #listrdsinstances              — list RDS instances with engine and endpoint\n" +
+		"  #listemr                       — list EMR clusters with name, ID, and state\n" +
+		"\n" +
+		"  Workflows\n" +
 		"  #listsfn                       — list Step Functions state machines\n" +
 		"  #listsfnruns <sfn-name>        — list recent executions for a state machine\n" +
+		"  #listemrjobs <cluster-name>    — list steps (jobs) for an EMR cluster\n" +
+		"\n" +
 		"  #help                          — show this message\n" +
 		"\n" +
-		"<instance> accepts an instance ID (i-…) or a name tag (partial match ok).\n" +
+		"Name matching: exact ID → exact name (case-insensitive) → partial name.\n" +
 		"Scroll: ↑/↓ line  •  PgUp/PgDn or ctrl+u/ctrl+d half page"
 }
 
@@ -826,6 +895,30 @@ func formatSFNExecutions(machineName string, execs []aws.SfnExecution) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
+func formatEMRList(clusters []aws.EmrCluster) string {
+	if len(clusters) == 0 {
+		return "No EMR clusters found."
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("EMR Clusters (%d):\n", len(clusters)))
+	for _, c := range clusters {
+		sb.WriteString(fmt.Sprintf("  • %-40s  %-14s  %s\n", c.Name, c.State, c.Id))
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func formatEMRSteps(clusterName string, steps []aws.EmrStep) string {
+	if len(steps) == 0 {
+		return fmt.Sprintf("No steps found for cluster %q.", clusterName)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Steps for %s (%d):\n", clusterName, len(steps)))
+	for _, s := range steps {
+		sb.WriteString(fmt.Sprintf("  • %-40s  %-12s  %s\n", s.Name, s.State, s.Id))
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 func mustAtoi(s string) int {
 	v := 0
 	for _, ch := range s {
@@ -878,7 +971,7 @@ func (m DevOpsAgentViewModel) View() string {
 		return m.spaceList.View()
 
 	case devOpsStateChat:
-		sep := devOpsSeparatorStyle.Render(strings.Repeat("─", max(0, m.window.Width)))
+		sep := m.renderSeparator()
 		inputLine := devOpsInputPromptStyle.Render("> ") + m.input.View()
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.viewport.View(),
@@ -898,6 +991,26 @@ func (m DevOpsAgentViewModel) View() string {
 		return content
 	}
 	return ""
+}
+
+// renderSeparator draws the horizontal rule between the viewport and the input.
+// When queries have been made it right-aligns a session cost summary.
+func (m DevOpsAgentViewModel) renderSeparator() string {
+	const lineChar = "─"
+	if m.queryCount == 0 {
+		return devOpsSeparatorStyle.Render(strings.Repeat(lineChar, max(0, m.window.Width)))
+	}
+
+	totalCost := m.totalDuration.Seconds() * devOpsAgentCostPerSecond
+	noun := "query"
+	if m.queryCount != 1 {
+		noun = "queries"
+	}
+	stats := fmt.Sprintf(" %d %s · %.1fs · $%.5f ", m.queryCount, noun, m.totalDuration.Seconds(), totalCost)
+	statsWidth := lipgloss.Width(stats)
+	lineWidth := max(0, m.window.Width-statsWidth)
+	return devOpsSeparatorStyle.Render(strings.Repeat(lineChar, lineWidth)) +
+		devOpsCostStyle.Render(stats)
 }
 
 // renderHistory builds the viewport content from m.history.
@@ -928,6 +1041,8 @@ func (m *DevOpsAgentViewModel) renderHistory() string {
 		case "system":
 			sb.WriteString(devOpsSystemLabelStyle.Render("  ─") + " ")
 			sb.WriteString(devOpsDimStyle.Render(wordwrap.String(msg.content, wrapWidth-2)))
+		case "cost":
+			sb.WriteString(devOpsCostStyle.Render("  " + msg.content))
 		}
 		sb.WriteString("\n")
 	}
