@@ -6,6 +6,12 @@
 **A command-line interface (TUI) tool built in Go to simplify navigation and exploration within your AWS environment.**  This tool aims to provide a more intuitive and focused way to discover resources and services, similar to the `e1s` tool for ECS, but generalized for broader AWS usage.
 
 ### Quickstart
+
+### Pre-requisite
+
+Install SSM Plugin: 
+- https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+
 1. Download the latest [release](https://github.com/d3b-center/flying_nimbus/releases). Set `FN_VERSION` to the release version.
 2. Fix the permissions on your download and create a symlink for convenience.
 ```
