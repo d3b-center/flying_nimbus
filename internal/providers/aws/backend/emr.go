@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/emr"
@@ -12,9 +14,12 @@ import (
 
 // EmrCluster is a simplified view of an Amazon EMR cluster.
 type EmrCluster struct {
-	Id    string
-	Name  string
-	State string
+	Id          string
+	Name        string
+	State       string
+	// LastJobTime is the start time of the most recent step.
+	// Nil means the cluster has no steps or they could not be fetched.
+	LastJobTime *time.Time
 }
 
 // EmrStep is a simplified view of an EMR cluster step (job).
@@ -86,6 +91,85 @@ func (s *EmrService) ListClusters(ctx context.Context) ([]EmrCluster, error) {
 
 	slog.Debug(fmt.Sprintf("emr: found %d clusters", len(clusters)))
 	return clusters, nil
+}
+
+// ListClustersWithActivity fetches all clusters, enriches each with the start
+// time of its most recent step, then sorts by that timestamp descending
+// (most recently active first). Clusters with no steps appear at the bottom.
+func (s *EmrService) ListClustersWithActivity(ctx context.Context) ([]EmrCluster, error) {
+	clusters, err := s.ListClusters(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// ListSteps returns steps in reverse order (newest first). Fetching the
+	// first page and reading index 0 gives the most recent step without
+	// iterating through all pages.
+	for i, c := range clusters {
+		out, err := s.api.ListSteps(ctx, &emr.ListStepsInput{
+			ClusterId: aws.String(c.Id),
+		})
+		if err != nil {
+			slog.Debug("emr: could not get last step", "id", c.Id, "err", err)
+			continue
+		}
+		if len(out.Steps) > 0 {
+			st := out.Steps[0]
+			if st.Status != nil && st.Status.Timeline != nil && st.Status.Timeline.StartDateTime != nil {
+				t := *st.Status.Timeline.StartDateTime
+				clusters[i].LastJobTime = &t
+			}
+		}
+	}
+
+	// Sort: most recently active first; clusters with no steps sink to bottom.
+	sort.Slice(clusters, func(i, j int) bool {
+		ti := clusters[i].LastJobTime
+		tj := clusters[j].LastJobTime
+		if ti == nil && tj == nil {
+			return clusters[i].Name < clusters[j].Name
+		}
+		if ti == nil {
+			return false
+		}
+		if tj == nil {
+			return true
+		}
+		return ti.After(*tj)
+	})
+
+	return clusters, nil
+}
+
+// GetRecentSteps fetches the first page of steps for a cluster (newest first,
+// limited to max entries). It is used for tree-view display rather than full
+// step listing. Use ListSteps for exhaustive results.
+func (s *EmrService) GetRecentSteps(ctx context.Context, clusterId string, max int) ([]EmrStep, error) {
+	out, err := s.api.ListSteps(ctx, &emr.ListStepsInput{
+		ClusterId: aws.String(clusterId),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list EMR steps: %w", err)
+	}
+	var steps []EmrStep
+	for i, st := range out.Steps {
+		if i >= max {
+			break
+		}
+		if st.Id == nil || st.Name == nil {
+			continue
+		}
+		state := ""
+		if st.Status != nil {
+			state = string(st.Status.State)
+		}
+		steps = append(steps, EmrStep{
+			Id:    *st.Id,
+			Name:  *st.Name,
+			State: state,
+		})
+	}
+	return steps, nil
 }
 
 // ListSteps returns all steps for the given cluster, collecting all pages.

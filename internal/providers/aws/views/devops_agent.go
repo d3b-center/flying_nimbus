@@ -1,7 +1,6 @@
 package views
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -71,7 +70,15 @@ type listResultMsg struct {
 	err     error
 }
 
-// ── view states ───────────────────────────────────────────────────────────────
+// resourceNamesMsg is produced by background fetches that populate the
+// autocomplete name caches for #ls suggestions.
+type resourceNamesMsg struct {
+	kind  string   // "ec2" | "rds" | "sfn" | "emr" | "ecs-clusters" | "ecs-services" | "ecs-tasks"
+	names []string // nil signals fetch failure (cache stays nil → retry on next keystroke)
+	key   string   // for compound caches: cluster name (services) or "cluster/service" (tasks)
+}
+
+// ── View states & constants ───────────────────────────────────────────────────
 
 type devOpsAgentViewState int
 
@@ -81,19 +88,20 @@ const (
 	devOpsStateChat
 )
 
+// devOpsInputRows is the fixed row budget below the viewport.
 const devOpsInputRows = 3
 
 // devOpsAgentCostPerSecond is the AWS DevOps Agent billing rate in USD.
 const devOpsAgentCostPerSecond = 0.00083
 
-// ── key bindings ──────────────────────────────────────────────────────────────
+// ── Key bindings ──────────────────────────────────────────────────────────────
 
 var devOpsSendKey = key.NewBinding(
 	key.WithKeys("enter"),
 	key.WithHelp("enter", "send"),
 )
 
-// ── styles ────────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 var (
 	devOpsUserLabelStyle = lipgloss.NewStyle().
@@ -126,14 +134,14 @@ var (
 			Italic(true)
 )
 
-// ── chat history entry ────────────────────────────────────────────────────────
+// ── Chat message ──────────────────────────────────────────────────────────────
 
 type devOpsMessage struct {
-	role    string // "user" | "agent" | "system"
+	role    string // "user" | "agent" | "system" | "cost"
 	content string
 }
 
-// ── view model ────────────────────────────────────────────────────────────────
+// ── View model ────────────────────────────────────────────────────────────────
 
 // DevOpsAgentViewModel is the TUI for the AWS DevOps Agent chat screen.
 type DevOpsAgentViewModel struct {
@@ -146,13 +154,13 @@ type DevOpsAgentViewModel struct {
 	spaces    []aws.AgentSpace
 
 	// Chat session
-	selectedSpace         aws.AgentSpace
-	executionId           string
-	history               []devOpsMessage
-	viewport              viewport.Model
-	input                 textinput.Model
-	spinner               spinner.Model
-	isSending             bool
+	selectedSpace aws.AgentSpace
+	executionId   string
+	history       []devOpsMessage
+	viewport      viewport.Model
+	input         textinput.Model
+	spinner       spinner.Model
+	isSending     bool
 
 	// Usage tracking
 	queryStartTime time.Time
@@ -166,9 +174,35 @@ type DevOpsAgentViewModel struct {
 	pendingRDSInstance    aws.RDSInstance // RDS remote port-forward target
 	pendingBastion        aws.Ec2Instance // bastion for RDS tunnels
 
+	// agentUnavailable is set when ListAgentSpaces fails or returns nothing.
+	// #-commands still work; plain-text questions return a notice instead.
+	agentUnavailable bool
+
+	// suggestions holds the current autocomplete matches for the typed # prefix.
+	suggestions []string
+
+	// Command history — up to 5 most recently sent commands, newest first.
+	// cmdHistoryIdx is -1 when not navigating; ≥0 while navigating.
+	// inputSnapshot preserves whatever the user was typing when they started.
+	cmdHistory    []string
+	cmdHistoryIdx int
+	inputSnapshot string
+
+	// Resource name caches for autocomplete. nil = not yet fetched.
+	// An empty non-nil slice means the fetch succeeded but found nothing.
+	cachedEC2Names []string
+	cachedRDSNames []string
+	cachedSFNNames []string
+	cachedEMRNames []string
+	// ECS caches — compound keys: clusterName for services, "cluster/service" for tasks.
+	cachedECSClusters []string
+	cachedECSServices map[string][]string // cluster → []serviceName
+	cachedECSTasks    map[string][]string // "cluster/service" → []taskID
+
 	err error
 }
 
+// InitDevOpsAgentViewModel creates the initial DevOps Agent view.
 func InitDevOpsAgentViewModel(appService *app.App, windowSize common.ContentWindowSizeMsg) DevOpsAgentViewModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -178,6 +212,8 @@ func InitDevOpsAgentViewModel(appService *app.App, windowSize common.ContentWind
 	ti.Placeholder = "Ask a question or type #help for commands..."
 	ti.CharLimit = 2048
 	ti.Width = max(1, windowSize.Width-4)
+	ti.ShowSuggestions = true
+	ti.SetSuggestions(allHashCommands)
 
 	delegate := list.NewDefaultDelegate()
 	l := list.New([]list.Item{}, delegate, windowSize.Width, windowSize.Height)
@@ -190,19 +226,25 @@ func InitDevOpsAgentViewModel(appService *app.App, windowSize common.ContentWind
 	vp := viewport.New(windowSize.Width, vpHeight)
 
 	return DevOpsAgentViewModel{
-		app:       appService,
-		window:    windowSize,
-		state:     devOpsStateLoadingSpaces,
-		spaceList: l,
-		viewport:  vp,
-		input:     ti,
-		spinner:   sp,
+		app:           appService,
+		window:        windowSize,
+		state:         devOpsStateLoadingSpaces,
+		spaceList:     l,
+		viewport:      vp,
+		input:         ti,
+		spinner:       sp,
+		cmdHistoryIdx: -1,
 	}
 }
 
 // ── NimbusModel interface ─────────────────────────────────────────────────────
 
-func (m DevOpsAgentViewModel) Title() string { return "DevOps Agent" }
+func (m DevOpsAgentViewModel) Title() string {
+	if m.agentUnavailable {
+		return "DevOps Agent (commands only)"
+	}
+	return "DevOps Agent"
+}
 
 func (m DevOpsAgentViewModel) Commands() common.Commands {
 	if m.state == devOpsStateChat {
@@ -246,136 +288,6 @@ func (m DevOpsAgentViewModel) sendToAgentCmd(space aws.AgentSpace, executionId, 
 	}
 }
 
-// resolveInstanceCmd looks up an EC2 instance by ID or name tag for #shell.
-func resolveInstanceCmd(ctx context.Context, ec2Svc *aws.Ec2Service, search string, kind ssmKind) tea.Cmd {
-	return func() tea.Msg {
-		instances, err := ec2Svc.ListInstances(ctx)
-		if err != nil {
-			return ssmInstanceResolvedMsg{err: fmt.Errorf("list instances: %w", err), kind: kind}
-		}
-		inst, err := findDevOpsInstance(instances, search)
-		return ssmInstanceResolvedMsg{instance: inst, kind: kind, err: err}
-	}
-}
-
-// resolveTunnelTargetCmd is used by #tunnel: tries EC2 first, falls back to
-// RDS. For RDS it also locates the bastion in the same VPC.
-func resolveTunnelTargetCmd(ctx context.Context, ec2Svc *aws.Ec2Service, rdsSvc *aws.RdsService, search string) tea.Cmd {
-	return func() tea.Msg {
-		// Try EC2 first.
-		ec2Instances, err := ec2Svc.ListInstances(ctx)
-		if err == nil {
-			if inst, err := findDevOpsInstance(ec2Instances, search); err == nil {
-				return ssmInstanceResolvedMsg{instance: inst, kind: ssmKindTunnel}
-			}
-		}
-
-		// Fall back to RDS.
-		rdsInstances, err := rdsSvc.ListDBInstances(ctx)
-		if err != nil {
-			return ssmRDSTunnelResolvedMsg{err: fmt.Errorf("no EC2 or RDS instance matching %q", search)}
-		}
-		rds, err := findRDSBySearch(rdsInstances, search)
-		if err != nil {
-			return ssmRDSTunnelResolvedMsg{err: fmt.Errorf("no EC2 or RDS instance matching %q", search)}
-		}
-
-		// Locate a bastion in the same VPC.
-		bastion, err := ec2Svc.FindBastionHost(ctx, rds.VpcID)
-		if err != nil {
-			return ssmRDSTunnelResolvedMsg{
-				err: fmt.Errorf("RDS instance %q found but no bastion in VPC %s: %w", rds.Id, rds.VpcID, err),
-			}
-		}
-
-		return ssmRDSTunnelResolvedMsg{rds: rds, bastion: bastion}
-	}
-}
-
-// findRDSBySearch matches by exact ID, case-insensitive ID, or partial ID.
-func findRDSBySearch(instances []aws.RDSInstance, search string) (aws.RDSInstance, error) {
-	lower := strings.ToLower(search)
-	for _, i := range instances {
-		if i.Id == search {
-			return i, nil
-		}
-	}
-	for _, i := range instances {
-		if strings.EqualFold(i.Id, search) {
-			return i, nil
-		}
-	}
-	for _, i := range instances {
-		if strings.Contains(strings.ToLower(i.Id), lower) {
-			return i, nil
-		}
-	}
-	return aws.RDSInstance{}, fmt.Errorf("no RDS instance matching %q", search)
-}
-
-// findDevOpsInstance matches by exact ID, exact name, or partial name (first match).
-func findDevOpsInstance(instances []aws.Ec2Instance, search string) (aws.Ec2Instance, error) {
-	lower := strings.ToLower(search)
-	for _, i := range instances {
-		if i.InstanceID == search {
-			return i, nil
-		}
-	}
-	for _, i := range instances {
-		if strings.EqualFold(i.Name, search) {
-			return i, nil
-		}
-	}
-	for _, i := range instances {
-		if strings.Contains(strings.ToLower(i.Name), lower) {
-			return i, nil
-		}
-	}
-	return aws.Ec2Instance{}, fmt.Errorf("no instance found matching %q", search)
-}
-
-// portForwardInputs returns the form fields for SSM port forwarding —
-// identical to ec2.go's ssmPortForwardInputs.
-func portForwardInputs() []c.InputField {
-	return []c.InputField{
-		{Label: LocalPortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
-		{Label: RemotePortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
-	}
-}
-
-// portForwardOnSubmit is called by the InputForm on submit — identical logic
-// to ec2.go's ssmPortForwardOnSubmit, adapted for the chat model.
-func (m DevOpsAgentViewModel) portForwardOnSubmit(values c.InputFormResult) tea.Cmd {
-	inst := m.pendingTunnelInstance
-	localPort := mustAtoi(values[LocalPortLabel])
-	remotePort := mustAtoi(values[RemotePortLabel])
-	config := aws.PortForwardConfig{LocalPort: localPort, RemotePort: remotePort}
-	cmd := m.app.AWS.Ssm.BuildPortForwardCmd(inst.InstanceID, config)
-	desc := fmt.Sprintf("tunnel %s (%s) localhost:%d → :%d", inst.Name, inst.InstanceID, localPort, remotePort)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return ssmExitedMsg{description: desc, err: err}
-	})
-}
-
-// rdsPortForwardOnSubmit is used when tunnelling to an RDS instance through a
-// bastion — calls BuildRemotePortForwardCmd with the RDS endpoint pre-filled.
-func (m DevOpsAgentViewModel) rdsPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
-	localPort := mustAtoi(values[LocalPortLabel])
-	config := aws.PortForwardConfig{
-		LocalPort:  localPort,
-		RemotePort: int(m.pendingRDSInstance.Port),
-		RemoteHost: m.pendingRDSInstance.Endpoint,
-	}
-	cmd := m.app.AWS.Ssm.BuildRemotePortForwardCmd(m.pendingBastion.InstanceID, config)
-	desc := fmt.Sprintf(
-		"RDS tunnel %s → localhost:%d (via bastion %s)",
-		m.pendingRDSInstance.Id, localPort, m.pendingBastion.Name,
-	)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return ssmExitedMsg{description: desc, err: err}
-	})
-}
-
 // ── Update ────────────────────────────────────────────────────────────────────
 
 func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -396,9 +308,11 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case agentSpacesLoadedMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			m.state = devOpsStateSelectSpace
+		if msg.err != nil || len(msg.spaces) == 0 {
+			m.agentUnavailable = true
+			m.state = devOpsStateChat
+			m.input.Focus()
+			m.syncViewport()
 			return m, nil
 		}
 		m.spaces = msg.spaces
@@ -431,8 +345,6 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 		return m, nil
 
-	// ── SSM instance resolution ───────────────────────────────────────────────
-
 	case ssmInstanceResolvedMsg:
 		m.isSending = false
 		if msg.err != nil {
@@ -441,10 +353,8 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			return m, nil
 		}
-
 		switch msg.kind {
 		case ssmKindShell:
-			// Same as ec2.go ssmShell(): BuildSessionCmd + tea.ExecProcess.
 			m.replaceLastMsg("system", fmt.Sprintf(
 				"Starting shell on %s (%s) — press ctrl+c to end the session.",
 				msg.instance.Name, msg.instance.InstanceID,
@@ -456,9 +366,7 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.ExecProcess(ssmCmd, func(err error) tea.Msg {
 				return ssmExitedMsg{description: desc, err: err}
 			})
-
 		case ssmKindTunnel:
-			// Same as ec2.go ssmPortForward(): open the InputForm overlay.
 			m.pendingTunnelInstance = msg.instance
 			m.replaceLastMsg("system", fmt.Sprintf(
 				"Instance resolved: %s (%s). Enter port numbers below.",
@@ -501,8 +409,6 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 		return m, nil
 
-	// ── InputForm messages (identical to ec2.go handling) ────────────────────
-
 	case c.InputFormCancelMsg:
 		m.isInputFormActive = false
 		m.appendMsg("system", "Port forward cancelled.")
@@ -514,8 +420,6 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isInputFormActive = false
 		return m, msg.OnSubmit(msg.Values)
 
-	// ── SSM process exit ──────────────────────────────────────────────────────
-
 	case ssmExitedMsg:
 		content := fmt.Sprintf("%s ended.", msg.description)
 		if msg.err != nil {
@@ -525,8 +429,6 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncViewport()
 		m.viewport.GotoBottom()
 		return m, nil
-
-	// ── List command results ───────────────────────────────────────────────────
 
 	case listResultMsg:
 		m.isSending = false
@@ -539,7 +441,31 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 		return m, nil
 
-	// ── Key handling ──────────────────────────────────────────────────────────
+	case resourceNamesMsg:
+		switch msg.kind {
+		case "ec2":
+			m.cachedEC2Names = msg.names
+		case "rds":
+			m.cachedRDSNames = msg.names
+		case "sfn":
+			m.cachedSFNNames = msg.names
+		case "emr":
+			m.cachedEMRNames = msg.names
+		case "ecs-clusters":
+			m.cachedECSClusters = msg.names
+		case "ecs-services":
+			if m.cachedECSServices == nil {
+				m.cachedECSServices = make(map[string][]string)
+			}
+			m.cachedECSServices[msg.key] = msg.names
+		case "ecs-tasks":
+			if m.cachedECSTasks == nil {
+				m.cachedECSTasks = make(map[string][]string)
+			}
+			m.cachedECSTasks[msg.key] = msg.names
+		}
+		m.refreshSuggestions()
+		return m, nil
 
 	case tea.KeyMsg:
 		if key.Matches(msg, constants.Keymap.Back) {
@@ -559,25 +485,53 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 
 		case devOpsStateChat:
-			// InputForm takes over all keys when active — same as ec2.go.
 			if m.isInputFormActive {
 				m.inputForm, cmd = m.inputForm.Update(msg)
 				return m, cmd
 			}
 
-			// Scroll bindings (arrow keys not consumed by single-line textinput).
 			switch msg.String() {
 			case "up":
-				m.viewport.LineUp(3)
+				inputEmpty := strings.TrimSpace(m.input.Value()) == ""
+				if inputEmpty || (m.cmdHistoryIdx == -1 && len(m.cmdHistory) == 0) {
+					// Empty input (or no history at all) → scroll viewport.
+					m.viewport.ScrollUp(3)
+					return m, nil
+				}
+				// Non-empty input: enter / advance history navigation.
+				if m.cmdHistoryIdx == -1 {
+					m.inputSnapshot = m.input.Value()
+					m.cmdHistoryIdx = 0
+				} else if m.cmdHistoryIdx < len(m.cmdHistory)-1 {
+					m.cmdHistoryIdx++
+				}
+				m.input.SetValue(m.cmdHistory[m.cmdHistoryIdx])
+				m.input.CursorEnd()
+				m.refreshSuggestions()
 				return m, nil
+
 			case "down":
-				m.viewport.LineDown(3)
+				if m.cmdHistoryIdx == -1 {
+					// Not in history navigation mode → scroll viewport.
+					m.viewport.ScrollDown(3)
+					return m, nil
+				}
+				if m.cmdHistoryIdx > 0 {
+					m.cmdHistoryIdx--
+					m.input.SetValue(m.cmdHistory[m.cmdHistoryIdx])
+				} else {
+					m.cmdHistoryIdx = -1
+					m.input.SetValue(m.inputSnapshot)
+				}
+				m.input.CursorEnd()
+				m.refreshSuggestions()
 				return m, nil
+
 			case "pgup", "ctrl+u":
-				m.viewport.HalfViewUp()
+				m.viewport.HalfPageUp()
 				return m, nil
 			case "pgdown", "ctrl+d":
-				m.viewport.HalfViewDown()
+				m.viewport.HalfPageDown()
 				return m, nil
 			}
 
@@ -586,19 +540,30 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if text == "" {
 					return m, nil
 				}
+				m.pushCmdHistory(text)
+				m.cmdHistoryIdx = -1
+				m.inputSnapshot = ""
 				m.input.SetValue("")
+				m.refreshSuggestions()
 				if strings.HasPrefix(text, "#") {
 					return m.handleHashCommand(text)
 				}
 				return m.sendToAgent(text)
 			}
 
+			// A printable character typed while navigating history exits
+			// history mode so the user can edit without clobbering the snapshot.
+			if msg.Type == tea.KeyRunes && m.cmdHistoryIdx != -1 {
+				m.cmdHistoryIdx = -1
+				m.inputSnapshot = ""
+			}
+
 			m.input, cmd = m.input.Update(msg)
-			return m, cmd
+			m.refreshSuggestions()
+			return m, tea.Batch(cmd, m.fetchResourceNamesIfNeeded())
 		}
 	}
 
-	// Delegate non-key messages.
 	switch m.state {
 	case devOpsStateSelectSpace:
 		m.spaceList, cmd = m.spaceList.Update(msg)
@@ -619,184 +584,102 @@ func (m DevOpsAgentViewModel) enterChat(space aws.AgentSpace) (DevOpsAgentViewMo
 }
 
 func (m DevOpsAgentViewModel) sendToAgent(text string) (DevOpsAgentViewModel, tea.Cmd) {
+	// Expand any embedded #ls resource references so the agent gets concrete
+	// identifiers rather than the shorthand syntax.
+	expanded := expandResourceRefs(text)
+
 	m.appendMsg("user", text)
+	if expanded != text {
+		m.appendMsg("system", "→ "+expanded)
+	}
+
+	if m.agentUnavailable {
+		m.appendMsg("agent",
+			"AWS DevOps Agent is not available in this account or region.\n"+
+				"You can still use all #list*, #shell, and #tunnel commands — type #help for the full list.")
+		m.syncViewport()
+		m.viewport.GotoBottom()
+		return m, nil
+	}
 	m.isSending = true
 	m.queryStartTime = time.Now()
 	execId := m.executionId
 	space := m.selectedSpace
 	m.syncViewport()
 	m.viewport.GotoBottom()
-	return m, tea.Batch(m.spinner.Tick, m.sendToAgentCmd(space, execId, text))
+	return m, tea.Batch(m.spinner.Tick, m.sendToAgentCmd(space, execId, expanded))
 }
 
-// handleHashCommand dispatches #shell / #tunnel / #help commands.
-func (m DevOpsAgentViewModel) handleHashCommand(input string) (DevOpsAgentViewModel, tea.Cmd) {
-	parts := strings.Fields(input)
-	if len(parts) == 0 {
-		return m, nil
+// fetchResourceNamesIfNeeded fires a background API call to populate a
+// resource-name cache the first time the user types a prefix that needs it.
+// Returns nil if no fetch is required (cache already populated or wrong prefix).
+func (m *DevOpsAgentViewModel) fetchResourceNamesIfNeeded() tea.Cmd {
+	if m.app == nil || m.app.AWS == nil {
+		return nil
 	}
-	cmdName := strings.ToLower(strings.TrimPrefix(parts[0], "#"))
-	args := parts[1:]
+	val := strings.ToLower(m.input.Value())
+	lsPart := lsPartFrom(val) // "#ls ..." tail, empty if no #ls present
 
-	m.appendMsg("user", input)
-
-	switch cmdName {
-	case "shell":
-		if len(args) == 0 {
-			m.appendMsg("system", "Usage: #shell <instance-id-or-name>")
-			m.syncViewport()
-			m.viewport.GotoBottom()
-			return m, nil
-		}
-		m.appendMsg("system", fmt.Sprintf("Resolving instance %q...", args[0]))
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		return m, tea.Batch(
-			m.spinner.Tick,
-			resolveInstanceCmd(m.app.Context, m.app.AWS.Ec2, args[0], ssmKindShell),
-		)
-
-	case "tunnel":
-		if len(args) == 0 {
-			m.appendMsg("system", "Usage: #tunnel <ec2-or-rds-name>")
-			m.syncViewport()
-			m.viewport.GotoBottom()
-			return m, nil
-		}
-		m.appendMsg("system", fmt.Sprintf("Resolving tunnel target %q (trying EC2, then RDS)...", args[0]))
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		return m, tea.Batch(
-			m.spinner.Tick,
-			resolveTunnelTargetCmd(m.app.Context, m.app.AWS.Ec2, m.app.AWS.Rds, args[0]),
-		)
-
-	case "listec2instances":
-		m.appendMsg("system", "Fetching EC2 instances...")
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		ec2Svc := m.app.AWS.Ec2
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			instances, err := ec2Svc.ListInstances(ctx)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatEC2List(instances)}
-		})
-
-	case "listrdsinstances":
-		m.appendMsg("system", "Fetching RDS instances...")
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		rdsSvc := m.app.AWS.Rds
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			instances, err := rdsSvc.ListDBInstances(ctx)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatRDSList(instances)}
-		})
-
-	case "listsfn":
-		m.appendMsg("system", "Fetching Step Functions...")
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		sfnSvc := m.app.AWS.Sfn
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			machines, err := sfnSvc.ListStateMachines(ctx)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatSFNList(machines)}
-		})
-
-	case "listsfnruns":
-		if len(args) == 0 {
-			m.appendMsg("system", "Usage: #listsfnruns <state-machine-name>")
-			m.syncViewport()
-			m.viewport.GotoBottom()
-			return m, nil
-		}
-		name := strings.Join(args, " ")
-		m.appendMsg("system", fmt.Sprintf("Fetching executions for %q...", name))
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		sfnSvc := m.app.AWS.Sfn
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			machine, err := sfnSvc.FindStateMachineByName(ctx, name)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			execs, err := sfnSvc.ListExecutions(ctx, machine.Arn, 20)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatSFNExecutions(machine.Name, execs)}
-		})
-
-	case "listemr":
-		m.appendMsg("system", "Fetching EMR clusters...")
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		emrSvc := m.app.AWS.Emr
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			clusters, err := emrSvc.ListClusters(ctx)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatEMRList(clusters)}
-		})
-
-	case "listemrjobs":
-		if len(args) == 0 {
-			m.appendMsg("system", "Usage: #listemrjobs <cluster-name>")
-			m.syncViewport()
-			m.viewport.GotoBottom()
-			return m, nil
-		}
-		name := strings.Join(args, " ")
-		m.appendMsg("system", fmt.Sprintf("Fetching steps for cluster %q...", name))
-		m.isSending = true
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		ctx := m.app.Context
-		emrSvc := m.app.AWS.Emr
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
-			cluster, err := emrSvc.FindClusterByName(ctx, name)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			steps, err := emrSvc.ListSteps(ctx, cluster.Id)
-			if err != nil {
-				return listResultMsg{err: err}
-			}
-			return listResultMsg{content: formatEMRSteps(cluster.Name, steps)}
-		})
-
-	case "help":
-		m.appendMsg("system", devOpsHelpText())
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		return m, nil
-
-	default:
-		m.appendMsg("system", fmt.Sprintf("Unknown command %q. Type #help for available commands.", cmdName))
-		m.syncViewport()
-		m.viewport.GotoBottom()
-		return m, nil
+	switch {
+	case strings.HasPrefix(lsPart, "#ls ec2 ") && m.cachedEC2Names == nil:
+		return fetchResourceNamesCmd(m.app, "ec2")
+	case strings.HasPrefix(val, "#shell ") && m.cachedEC2Names == nil:
+		return fetchResourceNamesCmd(m.app, "ec2")
+	case strings.HasPrefix(lsPart, "#ls rds ") && m.cachedRDSNames == nil:
+		return fetchResourceNamesCmd(m.app, "rds")
+	case strings.HasPrefix(lsPart, "#ls sfn ") && m.cachedSFNNames == nil:
+		return fetchResourceNamesCmd(m.app, "sfn")
+	case strings.HasPrefix(lsPart, "#ls emr ") && m.cachedEMRNames == nil:
+		return fetchResourceNamesCmd(m.app, "emr")
+	case (strings.HasPrefix(lsPart, "#ls ecs ") || strings.HasPrefix(val, "#logs ecs ")) &&
+		m.cachedECSClusters == nil:
+		return fetchResourceNamesCmd(m.app, "ecs-clusters")
 	}
+
+	// ECS services — fetch when cluster name is complete.
+	for _, p := range []string{"#ls ecs ", "#logs ecs "} {
+		src := lsPart
+		if p == "#logs ecs " {
+			src = val
+		}
+		if strings.HasPrefix(src, p) {
+			rest := src[len(p):]
+			if spaceIdx := strings.Index(rest, " "); spaceIdx >= 0 {
+				cluster := rest[:spaceIdx]
+				if cluster != "" {
+					if m.cachedECSServices == nil || m.cachedECSServices[cluster] == nil {
+						return fetchECSServicesCmd(m.app, cluster)
+					}
+				}
+			}
+		}
+	}
+
+	// ECS task IDs — fetch for both #logs ecs and #ls ecs when the full
+	// cluster/service context is known and the "task" keyword has been typed.
+	for _, ecsPrefix := range []string{"#logs ecs ", "#ls ecs "} {
+		src := val
+		if ecsPrefix == "#ls ecs " {
+			src = lsPartFrom(val)
+		}
+		if !strings.HasPrefix(src, ecsPrefix) {
+			continue
+		}
+		rest := src[len(ecsPrefix):]
+		if svcIdx := strings.Index(rest, " service "); svcIdx >= 0 {
+			cluster := rest[:svcIdx]
+			afterSvc := rest[svcIdx+len(" service "):]
+			if taskIdx := strings.Index(afterSvc, " task "); taskIdx >= 0 {
+				service := afterSvc[:taskIdx]
+				cacheKey := cluster + "/" + service
+				if m.cachedECSTasks == nil || m.cachedECSTasks[cacheKey] == nil {
+					return fetchECSTasksCmd(m.app, cluster, service, cacheKey)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (m *DevOpsAgentViewModel) appendMsg(role, content string) {
@@ -811,123 +694,19 @@ func (m *DevOpsAgentViewModel) replaceLastMsg(role, content string) {
 	m.appendMsg(role, content)
 }
 
-func devOpsHelpText() string {
-	return "Available commands:\n" +
-		"\n" +
-		"  Connectivity\n" +
-		"  #shell <instance>              — open an SSM shell session\n" +
-		"  #tunnel <ec2-or-rds-name>      — port forwarding; EC2 direct, RDS via bastion\n" +
-		"\n" +
-		"  Compute\n" +
-		"  #listec2instances              — list EC2 instances with name, ID, and state\n" +
-		"  #listrdsinstances              — list RDS instances with engine and endpoint\n" +
-		"  #listemr                       — list EMR clusters with name, ID, and state\n" +
-		"\n" +
-		"  Workflows\n" +
-		"  #listsfn                       — list Step Functions state machines\n" +
-		"  #listsfnruns <sfn-name>        — list recent executions for a state machine\n" +
-		"  #listemrjobs <cluster-name>    — list steps (jobs) for an EMR cluster\n" +
-		"\n" +
-		"  #help                          — show this message\n" +
-		"\n" +
-		"Name matching: exact ID → exact name (case-insensitive) → partial name.\n" +
-		"Scroll: ↑/↓ line  •  PgUp/PgDn or ctrl+u/ctrl+d half page"
-}
-
-// ── List formatters ───────────────────────────────────────────────────────────
-
-func formatEC2List(instances []aws.Ec2Instance) string {
-	if len(instances) == 0 {
-		return "No EC2 instances found."
+// pushCmdHistory prepends cmd to the command history, keeping at most 5
+// entries. Consecutive duplicate commands are not stored.
+func (m *DevOpsAgentViewModel) pushCmdHistory(cmd string) {
+	if cmd == "" {
+		return
 	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("EC2 Instances (%d):\n", len(instances)))
-	for _, i := range instances {
-		name := i.Name
-		if name == "" {
-			name = "(unnamed)"
-		}
-		sb.WriteString(fmt.Sprintf("  • %-36s  %-21s  %s\n", name, i.InstanceID, i.State))
+	if len(m.cmdHistory) > 0 && m.cmdHistory[0] == cmd {
+		return // don't duplicate the most recent entry
 	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatRDSList(instances []aws.RDSInstance) string {
-	if len(instances) == 0 {
-		return "No RDS instances found."
+	m.cmdHistory = append([]string{cmd}, m.cmdHistory...)
+	if len(m.cmdHistory) > 5 {
+		m.cmdHistory = m.cmdHistory[:5]
 	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("RDS Instances (%d):\n", len(instances)))
-	for _, i := range instances {
-		engine := i.DbEngine + " " + i.DbVersion
-		endpoint := i.Endpoint
-		if i.Port > 0 {
-			endpoint = fmt.Sprintf("%s:%d", i.Endpoint, i.Port)
-		}
-		sb.WriteString(fmt.Sprintf("  • %-36s  %-22s  %-10s  %s\n",
-			i.Id, engine, i.Status, endpoint))
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatSFNList(machines []aws.StateMachine) string {
-	if len(machines) == 0 {
-		return "No Step Functions state machines found."
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Step Functions (%d):\n", len(machines)))
-	for _, m := range machines {
-		sb.WriteString(fmt.Sprintf("  • %-48s  %s\n", m.Name, m.Type))
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatSFNExecutions(machineName string, execs []aws.SfnExecution) string {
-	if len(execs) == 0 {
-		return fmt.Sprintf("No executions found for %q.", machineName)
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Executions for %s (%d):\n", machineName, len(execs)))
-	for _, e := range execs {
-		started := e.StartDate.Format("2006-01-02 15:04:05")
-		sb.WriteString(fmt.Sprintf("  • %-40s  %-12s  %s\n", e.Name, e.Status, started))
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatEMRList(clusters []aws.EmrCluster) string {
-	if len(clusters) == 0 {
-		return "No EMR clusters found."
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("EMR Clusters (%d):\n", len(clusters)))
-	for _, c := range clusters {
-		sb.WriteString(fmt.Sprintf("  • %-40s  %-14s  %s\n", c.Name, c.State, c.Id))
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatEMRSteps(clusterName string, steps []aws.EmrStep) string {
-	if len(steps) == 0 {
-		return fmt.Sprintf("No steps found for cluster %q.", clusterName)
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Steps for %s (%d):\n", clusterName, len(steps)))
-	for _, s := range steps {
-		sb.WriteString(fmt.Sprintf("  • %-40s  %-12s  %s\n", s.Name, s.State, s.Id))
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func mustAtoi(s string) int {
-	v := 0
-	for _, ch := range s {
-		if ch < '0' || ch > '9' {
-			return 0
-		}
-		v = v*10 + int(ch-'0')
-	}
-	return v
 }
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -971,14 +750,18 @@ func (m DevOpsAgentViewModel) View() string {
 		return m.spaceList.View()
 
 	case devOpsStateChat:
-		sep := m.renderSeparator()
+		var sep string
+		if len(m.suggestions) > 0 {
+			sep = m.renderSuggestionBar()
+		} else {
+			sep = m.renderSeparator()
+		}
 		inputLine := devOpsInputPromptStyle.Render("> ") + m.input.View()
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			m.viewport.View(),
 			sep,
 			inputLine,
 		)
-		// Overlay the port-forward InputForm when active — same pattern as ec2.go.
 		if m.isInputFormActive {
 			return overlay.Composite(
 				m.inputForm.View(),
@@ -993,14 +776,58 @@ func (m DevOpsAgentViewModel) View() string {
 	return ""
 }
 
-// renderSeparator draws the horizontal rule between the viewport and the input.
-// When queries have been made it right-aligns a session cost summary.
+// renderSuggestionBar replaces the separator while # autocomplete is active.
+func (m DevOpsAgentViewModel) renderSuggestionBar() string {
+	typed := m.input.Value()
+	tabHint := devOpsDimStyle.Render(" ↹  ")
+	availWidth := m.window.Width - lipgloss.Width(tabHint) - 2
+
+	// For mid-sentence #ls references, only show the #ls tail in the bar so
+	// the long prose prefix doesn't overwhelm the available width.
+	displayTyped := typed
+	lowerTyped := strings.ToLower(typed)
+	if idx := strings.LastIndex(lowerTyped, "#ls "); idx > 0 {
+		displayTyped = typed[idx:]
+	}
+
+	var parts []string
+	usedWidth := 0
+
+	for i, cmd := range m.suggestions {
+		// Strip the prose prefix from the displayed suggestion too.
+		displayCmd := cmd
+		if lowerCmd := strings.ToLower(cmd); strings.LastIndex(lowerCmd, "#ls ") > 0 {
+			displayCmd = cmd[strings.LastIndex(lowerCmd, "#ls "):]
+		}
+
+		completion := displayCmd[len(displayTyped):]
+		var rendered string
+		if i == 0 {
+			rendered = devOpsDimStyle.Render(displayTyped) +
+				devOpsUserLabelStyle.Render(completion)
+		} else {
+			rendered = devOpsDimStyle.Render(displayCmd)
+		}
+		w := lipgloss.Width(rendered)
+		sepW := lipgloss.Width(devOpsDimStyle.Render("  "))
+		if usedWidth+w+sepW > availWidth && len(parts) > 0 {
+			parts = append(parts, devOpsDimStyle.Render("…"))
+			break
+		}
+		parts = append(parts, rendered)
+		usedWidth += w + sepW
+	}
+
+	return tabHint + strings.Join(parts, devOpsDimStyle.Render("  "))
+}
+
+// renderSeparator draws the horizontal rule with an optional right-aligned
+// session cost summary.
 func (m DevOpsAgentViewModel) renderSeparator() string {
 	const lineChar = "─"
 	if m.queryCount == 0 {
 		return devOpsSeparatorStyle.Render(strings.Repeat(lineChar, max(0, m.window.Width)))
 	}
-
 	totalCost := m.totalDuration.Seconds() * devOpsAgentCostPerSecond
 	noun := "query"
 	if m.queryCount != 1 {
@@ -1016,6 +843,14 @@ func (m DevOpsAgentViewModel) renderSeparator() string {
 // renderHistory builds the viewport content from m.history.
 func (m *DevOpsAgentViewModel) renderHistory() string {
 	if len(m.history) == 0 && !m.isSending {
+		if m.agentUnavailable {
+			return devOpsErrorStyle.Render("\n  AWS DevOps Agent is not available in this account or region.\n") +
+				devOpsDimStyle.Render(
+					"\n  All #list*, #shell, and #tunnel commands are still available.\n"+
+						"  Type #help for the full list.\n"+
+						"\n  Scroll: ↑/↓ · PgUp/PgDn · ctrl+u/ctrl+d",
+				)
+		}
 		return devOpsDimStyle.Render(
 			"\n  Agent space: " + m.selectedSpace.Name +
 				"\n\n  Ask anything, or type #help for special commands.\n" +

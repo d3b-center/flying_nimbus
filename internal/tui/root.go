@@ -246,18 +246,20 @@ func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, t
 		}
 	}
 
-	// When full help is shown or Auth Error, only allow toggling help off and quit
-	if m.help.ShowAll || m.isAuthError {
+	// Handle quit — only intercept 'q' when global routing is active.
+	// In RouteFocusedFirst mode (e.g. the chat input) 'q' is a regular
+	// character that must reach the focused component. ctrl+c always quits
+	// regardless because BubbleTea handles it at the program level.
+	if strategy == common.RouteGlobalFirst || m.help.ShowAll || m.isAuthError {
 		if key.Matches(msg, DefaultKeymap.Quit) {
 			return m, tea.Quit
 		}
-		// Block all other input when help is shown
-		return m, nil
 	}
 
-	// Handle quit
-	if key.Matches(msg, DefaultKeymap.Quit) {
-		return m, tea.Quit
+	// When the help overlay or auth-error modal is visible, block everything
+	// else so the user can only dismiss it (? to close help, q handled above).
+	if m.help.ShowAll || m.isAuthError {
+		return m, nil
 	}
 
 	// Handle global keys if routing strategy is RouteGlobalFirst

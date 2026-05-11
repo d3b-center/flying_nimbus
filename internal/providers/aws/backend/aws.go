@@ -23,6 +23,7 @@ type AwsService struct {
 	DevOpsAgent    *DevOpsAgentService
 	Sfn            *SfnService
 	Emr            *EmrService
+	Ecs            *EcsService
 	Identity       *CallerIdentity
 	LoggedIn       bool
 }
@@ -53,6 +54,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	devOpsAgent := InitDevOpsAgentService(cfg)
 	sfnSvc := InitSfnService(cfg)
 	emrSvc := InitEmrService(cfg)
+	ecsSvc := InitEcsService(cfg)
 	serviceCatalog := InitServiceCatalogService(cfg, ec2, cfn)
 
 	return &AwsService{
@@ -69,6 +71,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		DevOpsAgent:    devOpsAgent,
 		Sfn:            sfnSvc,
 		Emr:            emrSvc,
+		Ecs:            ecsSvc,
 		Identity:       identity,
 		LoggedIn:       loggedIn,
 	}, nil
