@@ -240,7 +240,7 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 
 	case tea.KeyMsg:
-		if key.Matches(msg, c.ForceRefresh) {
+		if m.list.FilterState() != list.Filtering && key.Matches(msg, c.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 			cmds = append(cmds, cmd)

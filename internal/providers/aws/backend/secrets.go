@@ -59,6 +59,12 @@ func (s SecretsService) ListSecretsByOwner(ctx context.Context, ownerName string
 	return s.paginatedListSecrets(ctx, input)
 }
 
+// ListAllSecrets retrieves every secret visible to the caller without any
+// owner filter.
+func (s SecretsService) ListAllSecrets(ctx context.Context) ([]Secret, error) {
+	return s.paginatedListSecrets(ctx, &secretsmanager.ListSecretsInput{})
+}
+
 // FetchSecretFields retrieves the secret value by ARN and returns all key/value pairs
 // parsed from a JSON secret string. If the value is not JSON, returns a single entry
 // keyed "value" containing the raw string.

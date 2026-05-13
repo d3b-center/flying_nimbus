@@ -37,6 +37,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.79.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/mwaa v1.40.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.10 // indirect

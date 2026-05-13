@@ -124,6 +124,7 @@ var lsSubCommands = []string{
 	"emr",
 	"sfn",
 	"ecs",
+	"mwaa",
 }
 
 // logsSubCommands are the valid resource types accepted by #logs.
@@ -131,6 +132,7 @@ var lsSubCommands = []string{
 var logsSubCommands = []string{
 	"sfn",
 	"ecs",
+	"mwaa",
 }
 
 // computeSuggestions returns commands (or sub-resources / keywords / resource
@@ -170,6 +172,9 @@ func (m *DevOpsAgentViewModel) computeSuggestions(input string) []string {
 		}
 		if strings.HasPrefix(lower, "#logs ecs ") {
 			return ecsLogsSuggestions(lower, m.cachedECSClusters, m.cachedECSServices, m.cachedECSTasks)
+		}
+		if strings.HasPrefix(lower, "#logs mwaa ") {
+			return mwaaLogsSuggestions(lower, m.cachedMWAAEnvNames, m.cachedMWAADags, m.cachedMWAARuns)
 		}
 		typed := lower[len("#logs "):]
 		var matches []string
@@ -235,8 +240,11 @@ func (m *DevOpsAgentViewModel) computeLsSuggestions(lower string) []string {
 		return resourceNameSuggestions(lower, "#ls emr ", m.cachedEMRNames)
 	}
 	if strings.HasPrefix(lower, "#ls ecs ") {
-			return ecsLsSuggestions(lower, m.cachedECSClusters, m.cachedECSServices, m.cachedECSTasks)
-		}
+		return ecsLsSuggestions(lower, m.cachedECSClusters, m.cachedECSServices, m.cachedECSTasks)
+	}
+	if strings.HasPrefix(lower, "#ls mwaa ") {
+		return mwaaLsSuggestions(lower, m.cachedMWAAEnvNames, m.cachedMWAADags, m.cachedMWAARuns)
+	}
 	// Suggest sub-resource types.
 	typed := lower[len("#ls "):]
 	// Stop after a space in the typed part — user is no longer on the type word.
@@ -389,6 +397,75 @@ func ecsLogsSuggestions(lower string, clusters []string, services, tasks map[str
 	return resourceNameSuggestions(lower, prefix, taskIDs)
 }
 
+// mwaaLsSuggestions handles #ls mwaa <env> [job [<dag> [run [<run>]]]] suggestions.
+// The chain mirrors the SFN/ECS pattern: env → "job" keyword → dag name → "run" keyword → run ID.
+func mwaaLsSuggestions(lower string, envNames []string, dags, runs map[string][]string) []string {
+	rest := lower[len("#ls mwaa "):]
+
+	// Level 3: past "job <dag> run " → suggest run IDs.
+	if runIdx := strings.Index(rest, " run "); runIdx >= 0 {
+		jobIdx := strings.Index(rest, " job ")
+		if jobIdx >= 0 && jobIdx < runIdx {
+			envName := rest[:jobIdx]
+			dagName := rest[jobIdx+len(" job "):runIdx]
+			cacheKey := envName + "/" + dagName
+			prefix := lower[:len("#ls mwaa ")+runIdx+len(" run ")]
+			return resourceNameSuggestions(lower, prefix, runs[cacheKey])
+		}
+	}
+
+	// Level 2: past "job " → suggest dag names or "run" keyword after dag.
+	if jobIdx := strings.Index(rest, " job "); jobIdx >= 0 {
+		envName := rest[:jobIdx]
+		dagPrefix := lower[:len("#ls mwaa ")+jobIdx+len(" job ")]
+		// Suggest "run" keyword once dag name is complete.
+		if s := keywordAfterName(lower, dagPrefix, "run"); s != nil {
+			return s
+		}
+		return resourceNameSuggestions(lower, dagPrefix, dags[envName])
+	}
+
+	// Level 1: past env name → suggest "job" keyword.
+	if s := keywordAfterName(lower, "#ls mwaa ", "job"); s != nil {
+		return s
+	}
+	_ = rest // avoid unused warning
+	return resourceNameSuggestions(lower, "#ls mwaa ", envNames)
+}
+
+// mwaaLogsSuggestions handles #logs mwaa <env> job <dag> run <run> suggestions.
+func mwaaLogsSuggestions(lower string, envNames []string, dags, runs map[string][]string) []string {
+	rest := lower[len("#logs mwaa "):]
+
+	// Level 3: past "job <dag> run " → suggest run IDs.
+	if runIdx := strings.Index(rest, " run "); runIdx >= 0 {
+		jobIdx := strings.Index(rest, " job ")
+		if jobIdx >= 0 && jobIdx < runIdx {
+			envName := rest[:jobIdx]
+			dagName := rest[jobIdx+len(" job "):runIdx]
+			cacheKey := envName + "/" + dagName
+			prefix := lower[:len("#logs mwaa ")+runIdx+len(" run ")]
+			return resourceNameSuggestions(lower, prefix, runs[cacheKey])
+		}
+	}
+
+	// Level 2: past "job " → suggest dag names or "run" keyword.
+	if jobIdx := strings.Index(rest, " job "); jobIdx >= 0 {
+		envName := rest[:jobIdx]
+		dagPrefix := lower[:len("#logs mwaa ")+jobIdx+len(" job ")]
+		if s := keywordAfterName(lower, dagPrefix, "run"); s != nil {
+			return s
+		}
+		return resourceNameSuggestions(lower, dagPrefix, dags[envName])
+	}
+
+	// Level 1: suggest "job" keyword or env names.
+	if s := keywordAfterName(lower, "#logs mwaa ", "job"); s != nil {
+		return s
+	}
+	return resourceNameSuggestions(lower, "#logs mwaa ", envNames)
+}
+
 // keywordAfterName returns a ["<base><keyword>"] suggestion when the user has
 // typed at least one word after the fixed prefix and the last partial word is
 // a non-complete prefix of keyword.
@@ -481,6 +558,14 @@ func fetchResourceNamesCmd(a *app.App, kind string) tea.Cmd {
 			for _, c := range clusters {
 				names = append(names, c.Name)
 			}
+		case "mwaa-envs":
+			envs, err := a.AWS.MWAA.ListEnvironments(ctx)
+			if err != nil {
+				return resourceNamesMsg{kind: kind, names: []string{}}
+			}
+			for _, e := range envs {
+				names = append(names, e.Name)
+			}
 		}
 
 		if names == nil {
@@ -523,6 +608,42 @@ func fetchECSTasksCmd(a *app.App, cluster, service, cacheKey string) tea.Cmd {
 			ids = append(ids, t.TaskID)
 		}
 		return resourceNamesMsg{kind: "ecs-tasks", key: cacheKey, names: ids}
+	}
+}
+
+// fetchMWAADagsCmd fetches DAG IDs for a given MWAA environment.
+func fetchMWAADagsCmd(a *app.App, envName string) tea.Cmd {
+	return func() tea.Msg {
+		if a == nil || a.AWS == nil || a.AWS.MWAA == nil {
+			return resourceNamesMsg{kind: "mwaa-dags", key: envName, names: []string{}}
+		}
+		dags, err := a.AWS.MWAA.ListDags(a.Context, envName)
+		if err != nil {
+			return resourceNamesMsg{kind: "mwaa-dags", key: envName, names: []string{}}
+		}
+		ids := make([]string, 0, len(dags))
+		for _, d := range dags {
+			ids = append(ids, d.DagId)
+		}
+		return resourceNamesMsg{kind: "mwaa-dags", key: envName, names: ids}
+	}
+}
+
+// fetchMWAARunsCmd fetches recent run IDs for a specific DAG.
+func fetchMWAARunsCmd(a *app.App, envName, dagId, cacheKey string) tea.Cmd {
+	return func() tea.Msg {
+		if a == nil || a.AWS == nil || a.AWS.MWAA == nil {
+			return resourceNamesMsg{kind: "mwaa-runs", key: cacheKey, names: []string{}}
+		}
+		runs, err := a.AWS.MWAA.ListDagRuns(a.Context, envName, dagId)
+		if err != nil {
+			return resourceNamesMsg{kind: "mwaa-runs", key: cacheKey, names: []string{}}
+		}
+		ids := make([]string, 0, len(runs))
+		for _, r := range runs {
+			ids = append(ids, r.RunId)
+		}
+		return resourceNamesMsg{kind: "mwaa-runs", key: cacheKey, names: ids}
 	}
 }
 
@@ -806,6 +927,21 @@ func (m DevOpsAgentViewModel) handleLsCmd(args []string) (DevOpsAgentViewModel, 
 		// #ls ecs <cluster> — list services in that cluster.
 		return m.handleListECSServicesCmd(strings.Join(args[1:], " "))
 
+	case "mwaa":
+		if len(args) == 1 {
+			return m.handleListMWAACmd()
+		}
+		// #ls mwaa <env> job <dag> run <run> → list task instances
+		if env, dag, run, ok := parseMWAARunArgs(args[1:]); ok {
+			return m.handleListMWAATaskInstancesCmd(env, dag, run)
+		}
+		// #ls mwaa <env> job <dag> → list DAG runs
+		if env, dag, ok := parseMWAAJobArgs(args[1:]); ok {
+			return m.handleListMWAARunsCmd(env, dag)
+		}
+		// #ls mwaa <env> → list DAGs
+		return m.handleListMWAADagsCmd(strings.Join(args[1:], " "))
+
 	default:
 		m.appendMsg("system", fmt.Sprintf(
 			"Unknown resource %q. Try: ec2, rds, emr, emr <name>, sfn, sfn <name>, sfn <name> job <id>",
@@ -879,6 +1015,88 @@ func (m DevOpsAgentViewModel) handleListECSTasksCmd(clusterName, serviceName str
 	})
 }
 
+// ── MWAA handlers ─────────────────────────────────────────────────────────────
+
+func (m DevOpsAgentViewModel) handleListMWAACmd() (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", "Fetching MWAA environments...")
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.MWAA
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		envs, err := svc.ListEnvironments(ctx)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: formatMWAAEnvironmentList(envs)}
+	})
+}
+
+func (m DevOpsAgentViewModel) handleListMWAADagsCmd(envName string) (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", fmt.Sprintf("Fetching DAGs for environment %q...", envName))
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.MWAA
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		dags, err := svc.ListDags(ctx, envName)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: formatMWAADagList(envName, dags)}
+	})
+}
+
+func (m DevOpsAgentViewModel) handleListMWAARunsCmd(envName, dagId string) (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", fmt.Sprintf("Fetching runs for DAG %q in %q...", dagId, envName))
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.MWAA
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		runs, err := svc.ListDagRuns(ctx, envName, dagId)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: formatMWAARunList(envName, dagId, runs)}
+	})
+}
+
+func (m DevOpsAgentViewModel) handleListMWAATaskInstancesCmd(envName, dagId, runId string) (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", fmt.Sprintf("Fetching task instances for run %q...", runId))
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.MWAA
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		tasks, err := svc.ListTaskInstances(ctx, envName, dagId, runId)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: formatMWAATaskInstanceList(envName, dagId, runId, tasks)}
+	})
+}
+
+func (m DevOpsAgentViewModel) handleMWAALogsCmd(envName, dagId, runId string) (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", fmt.Sprintf("Fetching logs for run %q (DAG %q, env %q)...", runId, dagId, envName))
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.MWAA
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		logs, err := svc.GetRunLogs(ctx, envName, dagId, runId)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: logs}
+	})
+}
+
 func (m DevOpsAgentViewModel) handleHelpCmd() (DevOpsAgentViewModel, tea.Cmd) {
 	m.appendMsg("system", devOpsHelpText())
 	m.syncViewport()
@@ -889,7 +1107,20 @@ func (m DevOpsAgentViewModel) handleHelpCmd() (DevOpsAgentViewModel, tea.Cmd) {
 // handleLogsCmd handles:
 //   #logs sfn <state_machine_name> job <execution_name>
 //   #logs ecs <cluster> service <service_name> task <task_id>
+//   #logs mwaa <env> job <dag> run <run_id>
 func (m DevOpsAgentViewModel) handleLogsCmd(args []string) (DevOpsAgentViewModel, tea.Cmd) {
+	if len(args) > 0 && strings.EqualFold(args[0], "mwaa") {
+		env, dag, run, ok := parseMWAARunArgs(args[1:])
+		if !ok {
+			m.appendMsg("system",
+				"Usage: #logs mwaa <environment> job <dag_id> run <run_id>")
+			m.syncViewport()
+			m.viewport.GotoBottom()
+			return m, nil
+		}
+		return m.handleMWAALogsCmd(env, dag, run)
+	}
+
 	if len(args) > 0 && strings.EqualFold(args[0], "ecs") {
 		cluster, service, taskID, ok := parseLogsECSArgs(args[1:])
 		if !ok {
@@ -1367,6 +1598,114 @@ func parseLogsECSArgs(args []string) (cluster, service, taskID string, ok bool) 
 	return cluster, service, taskID, true
 }
 
+// ── MWAA argument parsers ─────────────────────────────────────────────────────
+
+// parseMWAAJobArgs parses "<env> job <dag_id>" from args.
+// "job" is the keyword separating the environment name from the DAG id.
+func parseMWAAJobArgs(args []string) (envName, dagId string, ok bool) {
+	for i, a := range args {
+		if strings.EqualFold(a, "job") && i > 0 && i < len(args)-1 {
+			return strings.Join(args[:i], " "), strings.Join(args[i+1:], " "), true
+		}
+	}
+	return "", "", false
+}
+
+// parseMWAARunArgs parses "<env> job <dag_id> run <run_id>" from args.
+func parseMWAARunArgs(args []string) (envName, dagId, runId string, ok bool) {
+	// Find "run" keyword.
+	runIdx := -1
+	for i, a := range args {
+		if strings.EqualFold(a, "run") {
+			runIdx = i
+			break
+		}
+	}
+	if runIdx < 0 || runIdx >= len(args)-1 {
+		return "", "", "", false
+	}
+	// Find "job" keyword before "run".
+	jobIdx := -1
+	for i, a := range args[:runIdx] {
+		if strings.EqualFold(a, "job") {
+			jobIdx = i
+			break
+		}
+	}
+	if jobIdx < 0 || jobIdx >= runIdx-1 {
+		return "", "", "", false
+	}
+	envName = strings.Join(args[:jobIdx], " ")
+	dagId = strings.Join(args[jobIdx+1:runIdx], " ")
+	runId = strings.Join(args[runIdx+1:], " ")
+	if envName == "" || dagId == "" || runId == "" {
+		return "", "", "", false
+	}
+	return envName, dagId, runId, true
+}
+
+// ── MWAA formatters ───────────────────────────────────────────────────────────
+
+func formatMWAAEnvironmentList(envs []aws.MWAAEnvironment) string {
+	if len(envs) == 0 {
+		return "No MWAA environments found."
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("MWAA Environments (%d):\n", len(envs)))
+	for _, e := range envs {
+		sb.WriteString(fmt.Sprintf("  • %s\n", e.Name))
+	}
+	sb.WriteString("\nTip: use #ls mwaa <env> to list DAGs.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func formatMWAADagList(envName string, dags []aws.MWAADag) string {
+	if len(dags) == 0 {
+		return fmt.Sprintf("No DAGs found in environment %q.", envName)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("DAGs in %s (%d):\n", envName, len(dags)))
+	for _, d := range dags {
+		paused := ""
+		if d.IsPaused {
+			paused = "  [paused]"
+		}
+		sb.WriteString(fmt.Sprintf("  • %s%s\n", d.DagId, paused))
+	}
+	sb.WriteString("\nTip: use #ls mwaa <env> job <dag> to list runs.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func formatMWAARunList(envName, dagId string, runs []aws.MWAADagRun) string {
+	if len(runs) == 0 {
+		return fmt.Sprintf("No runs found for DAG %q in environment %q.", dagId, envName)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Runs for %s / %s (%d, newest first):\n", envName, dagId, len(runs)))
+	for _, r := range runs {
+		ts := r.ExecutionDate
+		if len(ts) > 19 {
+			ts = ts[:19]
+		}
+		sb.WriteString(fmt.Sprintf("  • %-50s  %-12s  %s\n", r.RunId, r.State, ts))
+	}
+	sb.WriteString("\nTip: use #ls mwaa <env> job <dag> run <run> to list task instances.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func formatMWAATaskInstanceList(envName, dagId, runId string, tasks []aws.MWAATaskInstance) string {
+	if len(tasks) == 0 {
+		return fmt.Sprintf("No task instances found for run %q.", runId)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Task instances for %s / %s / %s (%d):\n", envName, dagId, runId, len(tasks)))
+	for _, t := range tasks {
+		sb.WriteString(fmt.Sprintf("  • %-40s  %-12s  try %d\n", t.TaskId, t.State, t.TryNumber))
+	}
+	sb.WriteString("\nTip: use #logs mwaa <env> job <dag> run <run> to see task logs.")
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 // ── #logs parser & formatter ──────────────────────────────────────────────────
 
 // parseSFNLogsArgs extracts the state machine name and execution name from
@@ -1491,10 +1830,15 @@ func devOpsHelpText() string {
 		"  #ls ecs                                     — ECS clusters\n" +
 		"  #ls ecs <cluster>                           — services in a cluster\n" +
 		"  #ls ecs <cluster> service <service>         — running tasks for a service\n" +
+		"  #ls mwaa                                    — MWAA environments\n" +
+		"  #ls mwaa <env>                              — DAGs in an environment\n" +
+		"  #ls mwaa <env> job <dag>                    — runs for a DAG\n" +
+		"  #ls mwaa <env> job <dag> run <run>          — task instances for a run\n" +
 		"\n" +
 		"  Logs\n" +
-		"  #logs sfn <sfn> job <exec>                  — SFN execution timeline\n" +
-		"  #logs ecs <cluster> service <svc> task <id> — ECS container logs\n" +
+		"  #logs sfn <sfn> job <exec>                      — SFN execution timeline\n" +
+		"  #logs ecs <cluster> service <svc> task <id>     — ECS container logs\n" +
+		"  #logs mwaa <env> job <dag> run <run>            — MWAA DAG run task logs\n" +
 		"\n" +
 		"  #help                          — show this message\n" +
 		"\n" +

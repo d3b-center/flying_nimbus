@@ -199,6 +199,11 @@ type DevOpsAgentViewModel struct {
 	cachedECSServices map[string][]string // cluster → []serviceName
 	cachedECSTasks    map[string][]string // "cluster/service" → []taskID
 
+	// MWAA caches — compound keys following the env/dag/run hierarchy.
+	cachedMWAAEnvNames []string            // nil = not yet fetched
+	cachedMWAADags     map[string][]string // envName → []dagId
+	cachedMWAARuns     map[string][]string // "envName/dagId" → []runId
+
 	err error
 }
 
@@ -463,6 +468,18 @@ func (m DevOpsAgentViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cachedECSTasks = make(map[string][]string)
 			}
 			m.cachedECSTasks[msg.key] = msg.names
+		case "mwaa-envs":
+			m.cachedMWAAEnvNames = msg.names
+		case "mwaa-dags":
+			if m.cachedMWAADags == nil {
+				m.cachedMWAADags = make(map[string][]string)
+			}
+			m.cachedMWAADags[msg.key] = msg.names
+		case "mwaa-runs":
+			if m.cachedMWAARuns == nil {
+				m.cachedMWAARuns = make(map[string][]string)
+			}
+			m.cachedMWAARuns[msg.key] = msg.names
 		}
 		m.refreshSuggestions()
 		return m, nil
@@ -674,6 +691,38 @@ func (m *DevOpsAgentViewModel) fetchResourceNamesIfNeeded() tea.Cmd {
 				cacheKey := cluster + "/" + service
 				if m.cachedECSTasks == nil || m.cachedECSTasks[cacheKey] == nil {
 					return fetchECSTasksCmd(m.app, cluster, service, cacheKey)
+				}
+			}
+		}
+	}
+
+	// MWAA — triggered by #ls mwaa and #logs mwaa prefixes.
+	mwaaPart := ""
+	if lp := lsPartFrom(val); strings.HasPrefix(lp, "#ls mwaa ") {
+		mwaaPart = lp[len("#ls mwaa "):]
+	} else if strings.HasPrefix(val, "#logs mwaa ") {
+		mwaaPart = val[len("#logs mwaa "):]
+	}
+	if mwaaPart != "" {
+		if m.cachedMWAAEnvNames == nil {
+			return fetchResourceNamesCmd(m.app, "mwaa-envs")
+		}
+		if spaceIdx := strings.Index(mwaaPart, " "); spaceIdx >= 0 {
+			envName := mwaaPart[:spaceIdx]
+			if envName != "" {
+				if m.cachedMWAADags == nil || m.cachedMWAADags[envName] == nil {
+					return fetchMWAADagsCmd(m.app, envName)
+				}
+				afterEnv := mwaaPart[spaceIdx+1:]
+				if jobIdx := strings.Index(afterEnv, " job "); jobIdx >= 0 {
+					afterJob := afterEnv[jobIdx+len(" job "):]
+					if runSpaceIdx := strings.Index(afterJob, " "); runSpaceIdx >= 0 {
+						dagName := afterJob[:runSpaceIdx]
+						cacheKey := envName + "/" + dagName
+						if m.cachedMWAARuns == nil || m.cachedMWAARuns[cacheKey] == nil {
+							return fetchMWAARunsCmd(m.app, envName, dagName, cacheKey)
+						}
+					}
 				}
 			}
 		}

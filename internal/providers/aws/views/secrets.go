@@ -22,6 +22,12 @@ import (
 	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
 
+// keyToggleSecretView switches between "my secrets" and "all secrets" modes.
+var keyToggleSecretView = key.NewBinding(
+	key.WithKeys("v"),
+	key.WithHelp("v", "toggle mine/all"),
+)
+
 // secretSource identifies which backend a SecretItem came from.
 type secretSource int
 
@@ -59,6 +65,7 @@ type SecretsViewModel struct {
 	list                    list.Model
 	loader                  spinner.Model
 	isLoading               bool
+	showAllSecrets          bool // false = owner-filtered, true = all visible
 	windowSize              common.ContentWindowSizeMsg
 	secretsDetail           string
 	isDetailViewportFocused bool
@@ -110,11 +117,14 @@ func InitSecretsViewModel(appService *app.App, windowSize common.ContentWindowSi
 }
 
 func (m SecretsViewModel) Title() string {
+	if m.showAllSecrets {
+		return "All Secrets"
+	}
 	return "Secrets"
 }
 
 func (m SecretsViewModel) Commands() common.Commands {
-	return []key.Binding{c.ForceRefresh, c.ToggleFocus, c.CopySecret}
+	return []key.Binding{c.ForceRefresh, c.ToggleFocus, c.CopySecret, keyToggleSecretView}
 }
 
 func (m SecretsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -142,7 +152,13 @@ func fetchSecretsManagerCmd(ctx context.Context, svc *aws.SecretsService, owner 
 			slog.Warn("Secrets Manager service is nil; skipping fetch")
 			return secretsLoadedMsg{source: sourceSecretsManager}
 		}
-		secrets, err := svc.ListSecretsByOwner(ctx, owner)
+		var secrets []aws.Secret
+		var err error
+		if owner == "" {
+			secrets, err = svc.ListAllSecrets(ctx)
+		} else {
+			secrets, err = svc.ListSecretsByOwner(ctx, owner)
+		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to list secrets: %v", err))
 			return secretsLoadedMsg{source: sourceSecretsManager}
@@ -162,7 +178,13 @@ func fetchParameterStoreCmd(ctx context.Context, svc *aws.ParameterStoreService,
 			slog.Warn("Parameter Store service is nil; skipping fetch")
 			return secretsLoadedMsg{source: sourceParameterStore}
 		}
-		params, err := svc.ListParametersByOwner(ctx, owner)
+		var params []aws.Parameter
+		var err error
+		if owner == "" {
+			params, err = svc.ListAllParameters(ctx)
+		} else {
+			params, err = svc.ListParametersByOwner(ctx, owner)
+		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to list parameters: %v", err))
 			return secretsLoadedMsg{source: sourceParameterStore}
@@ -258,14 +280,23 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		cmd = m.handleKeypress(msg)
+		m.updateInputRouting()
 		return m, cmd
+
+	default:
+		// Forward any unhandled messages (e.g. FilterMatchesMsg, textinput.BlinkMsg)
+		// to the list so its internal async operations (filtering, cursor blink) work.
+		var listCmd tea.Cmd
+		m.list, listCmd = m.list.Update(msg)
+		cmd = listCmd
 	}
 
+	m.updateInputRouting()
 	return m, cmd
 }
 
 func (m *SecretsViewModel) updateInputRouting() {
-	if m.isActionMenuActive || m.isDetailViewportFocused {
+	if m.isActionMenuActive || m.isDetailViewportFocused || m.list.FilterState() == list.Filtering {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst
@@ -430,11 +461,29 @@ func generateSecretDetails(selectedItem list.Item) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
+// effectiveOwner returns the owner filter string for the current view mode.
+// An empty string means "all secrets" (no filter).
+func (m SecretsViewModel) effectiveOwner() string {
+	if m.showAllSecrets {
+		return ""
+	}
+	return ownerName(m.app.AWS.Identity)
+}
+
 // handleKeypress processes keyboard input.
 func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
+
 	if m.isActionMenuActive {
 		m.actionMenu, cmd = m.actionMenu.Update(msg)
+		return cmd
+	}
+
+	// During list filtering, pass the key directly to the list so that
+	// characters reach the filter field instead of triggering shortcuts.
+	if m.list.FilterState() == list.Filtering {
+		m.list, cmd = m.list.Update(msg)
+		m.updateSecretDetails()
 		return cmd
 	}
 
@@ -454,11 +503,25 @@ func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		m.isLoading = true
 		m.items = nil
 		m.pending = 2
-		owner := ownerName(m.app.AWS.Identity)
-		slog.Debug(fmt.Sprintf("Owner: %s", owner))
 		return tea.Batch(
 			m.loader.Tick,
-			fetchAllSecretsCmd(m.app.Context, m.app, owner),
+			fetchAllSecretsCmd(m.app.Context, m.app, m.effectiveOwner()),
+		)
+
+	case key.Matches(msg, keyToggleSecretView):
+		m.showAllSecrets = !m.showAllSecrets
+		m.isLoading = true
+		m.items = nil
+		m.pending = 2
+		if m.showAllSecrets {
+			m.list.Title = "All Secrets"
+		} else {
+			m.list.Title = "My Secrets"
+		}
+		slog.Debug(fmt.Sprintf("Secrets view toggled: showAll=%v", m.showAllSecrets))
+		return tea.Batch(
+			m.loader.Tick,
+			fetchAllSecretsCmd(m.app.Context, m.app, m.effectiveOwner()),
 		)
 
 	case key.Matches(msg, c.ToggleFocus):

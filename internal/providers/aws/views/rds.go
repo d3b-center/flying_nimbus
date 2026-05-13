@@ -231,7 +231,7 @@ func (m RdsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if key.Matches(msg, c.ForceRefresh) {
+		if m.list.FilterState() != list.Filtering && key.Matches(msg, c.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchRdsInstancesCmd(m.app.Context, m.app.AWS.Rds)
 			cmds = append(cmds, cmd)

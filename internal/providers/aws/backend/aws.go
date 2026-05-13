@@ -24,6 +24,7 @@ type AwsService struct {
 	Sfn            *SfnService
 	Emr            *EmrService
 	Ecs            *EcsService
+	MWAA           *MWAAService
 	Identity       *CallerIdentity
 	LoggedIn       bool
 }
@@ -55,6 +56,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 	sfnSvc := InitSfnService(cfg)
 	emrSvc := InitEmrService(cfg)
 	ecsSvc := InitEcsService(cfg)
+	mwaaSvc := InitMWAAService(cfg)
 	serviceCatalog := InitServiceCatalogService(cfg, ec2, cfn)
 
 	return &AwsService{
@@ -72,6 +74,7 @@ func InitAwsService(ctx context.Context) (*AwsService, error) {
 		Sfn:            sfnSvc,
 		Emr:            emrSvc,
 		Ecs:            ecsSvc,
+		MWAA:           mwaaSvc,
 		Identity:       identity,
 		LoggedIn:       loggedIn,
 	}, nil
