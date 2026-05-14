@@ -707,21 +707,24 @@ func (m *DevOpsAgentViewModel) fetchResourceNamesIfNeeded() tea.Cmd {
 		if m.cachedMWAAEnvNames == nil {
 			return fetchResourceNamesCmd(m.app, "mwaa-envs")
 		}
+		// Fetch DAGs once the env name is complete (space follows it).
 		if spaceIdx := strings.Index(mwaaPart, " "); spaceIdx >= 0 {
 			envName := mwaaPart[:spaceIdx]
-			if envName != "" {
-				if m.cachedMWAADags == nil || m.cachedMWAADags[envName] == nil {
-					return fetchMWAADagsCmd(m.app, envName)
-				}
-				afterEnv := mwaaPart[spaceIdx+1:]
-				if jobIdx := strings.Index(afterEnv, " job "); jobIdx >= 0 {
-					afterJob := afterEnv[jobIdx+len(" job "):]
-					if runSpaceIdx := strings.Index(afterJob, " "); runSpaceIdx >= 0 {
-						dagName := afterJob[:runSpaceIdx]
-						cacheKey := envName + "/" + dagName
-						if m.cachedMWAARuns == nil || m.cachedMWAARuns[cacheKey] == nil {
-							return fetchMWAARunsCmd(m.app, envName, dagName, cacheKey)
-						}
+			if envName != "" && (m.cachedMWAADags == nil || m.cachedMWAADags[envName] == nil) {
+				return fetchMWAADagsCmd(m.app, envName)
+			}
+		}
+		// Fetch run IDs once " job <dag> " is complete.
+		// Search for " job " in the full mwaaPart (same pattern as mwaaLsSuggestions).
+		if jobIdx := strings.Index(mwaaPart, " job "); jobIdx >= 0 {
+			envName := mwaaPart[:jobIdx]
+			afterJob := mwaaPart[jobIdx+len(" job "):]
+			if runSpaceIdx := strings.Index(afterJob, " "); runSpaceIdx >= 0 {
+				dagName := afterJob[:runSpaceIdx]
+				if dagName != "" {
+					cacheKey := envName + "/" + dagName
+					if m.cachedMWAARuns == nil || m.cachedMWAARuns[cacheKey] == nil {
+						return fetchMWAARunsCmd(m.app, envName, dagName, cacheKey)
 					}
 				}
 			}
