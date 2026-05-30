@@ -60,13 +60,19 @@ func (s ParameterStoreService) ListParametersByOwner(ctx context.Context, ownerN
 			},
 		},
 	}
-	return s.paginatedDescribeParameters(ctx, input)
+	return s.paginatedDescribeParameters(ctx, input, true)
 }
 
-func (s ParameterStoreService) paginatedDescribeParameters(ctx context.Context, input *ssm.DescribeParametersInput) ([]Parameter, error) {
+// ListAllParameters retrieves all parameters without filtering by owner.
+func (s ParameterStoreService) ListAllParameters(ctx context.Context) ([]Parameter, error) {
+	input := &ssm.DescribeParametersInput{}
+	return s.paginatedDescribeParameters(ctx, input, false)
+}
+
+func (s ParameterStoreService) paginatedDescribeParameters(ctx context.Context, input *ssm.DescribeParametersInput, loadTags bool) ([]Parameter, error) {
 	params := make([]Parameter, 0)
 	for {
-		page, nextToken, err := s.fetchParametersPage(ctx, input)
+		page, nextToken, err := s.fetchParametersPage(ctx, input, loadTags)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +85,7 @@ func (s ParameterStoreService) paginatedDescribeParameters(ctx context.Context, 
 	return params, nil
 }
 
-func (s ParameterStoreService) fetchParametersPage(ctx context.Context, input *ssm.DescribeParametersInput) ([]Parameter, *string, error) {
+func (s ParameterStoreService) fetchParametersPage(ctx context.Context, input *ssm.DescribeParametersInput, loadTags bool) ([]Parameter, *string, error) {
 	result, err := s.api.DescribeParameters(ctx, input)
 	if err != nil {
 		return nil, nil, err
@@ -87,9 +93,14 @@ func (s ParameterStoreService) fetchParametersPage(ctx context.Context, input *s
 
 	params := make([]Parameter, 0, len(result.Parameters))
 	for _, entry := range result.Parameters {
-		tags, err := s.fetchTags(ctx, aws.ToString(entry.Name))
-		if err != nil {
-			slog.Warn(fmt.Sprintf("Failed to fetch tags for parameter %s: %v", aws.ToString(entry.Name), err))
+		var tags map[string]string
+		if loadTags {
+			tags, err = s.fetchTags(ctx, aws.ToString(entry.Name))
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Failed to fetch tags for parameter %s: %v", aws.ToString(entry.Name), err))
+				tags = map[string]string{}
+			}
+		} else {
 			tags = map[string]string{}
 		}
 		params = append(params, Parameter{

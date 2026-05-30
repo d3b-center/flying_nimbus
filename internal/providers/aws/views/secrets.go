@@ -23,7 +23,16 @@ import (
 )
 
 // secretSource identifies which backend a SecretItem came from.
-type secretSource int
+type (
+	secretSource int
+	sourceFilter int
+)
+
+const (
+	filterAll sourceFilter = iota
+	filterSecretsManagerOnly
+	filterParameterStoreOnly
+)
 
 const (
 	sourceSecretsManager secretSource = iota
@@ -51,7 +60,13 @@ func (i SecretItem) Description() string {
 	return "[PS] " + i.param.ARN
 }
 
-func (i SecretItem) FilterValue() string { return i.Title() }
+func (i SecretItem) FilterValue() string {
+	prefix := "[SM]"
+	if i.source == sourceParameterStore {
+		prefix = "[PS]"
+	}
+	return prefix + " " + i.Title()
+}
 
 // SecretsViewModel renders secrets from Secrets Manager and Parameter Store combined.
 type SecretsViewModel struct {
@@ -73,6 +88,8 @@ type SecretsViewModel struct {
 	inputForm               c.InputForm
 	pending                 int
 	items                   []list.Item
+	showAllSecrets          bool
+	currentFilter           sourceFilter
 }
 
 type secretsLoadedMsg struct {
@@ -104,6 +121,7 @@ func InitSecretsViewModel(appService *app.App, windowSize common.ContentWindowSi
 		windowSize:           windowSize,
 		detailViewport:       vp,
 		inputRoutingStrategy: common.RouteGlobalFirst,
+		currentFilter:        filterAll,
 	}
 	m.updateLayout(windowSize)
 	return m
@@ -114,7 +132,7 @@ func (m SecretsViewModel) Title() string {
 }
 
 func (m SecretsViewModel) Commands() common.Commands {
-	return []key.Binding{c.ForceRefresh, c.ToggleFocus, c.CopySecret}
+	return []key.Binding{c.ForceRefresh, c.ToggleFocus, c.CopySecret, c.ToggleView, c.ToggleSource}
 }
 
 func (m SecretsViewModel) InputRoutingStrategy() common.InputRoutingStrategy {
@@ -129,20 +147,26 @@ func ownerName(identity *aws.CallerIdentity) string {
 }
 
 // fetchAllSecretsCmd fetches from both Secrets Manager and Parameter Store concurrently.
-func fetchAllSecretsCmd(ctx context.Context, app *app.App, owner string) tea.Cmd {
+func fetchAllSecretsCmd(ctx context.Context, app *app.App, owner string, showAll bool) tea.Cmd {
 	return tea.Batch(
-		fetchSecretsManagerCmd(ctx, app.AWS.Secrets, owner),
-		fetchParameterStoreCmd(ctx, app.AWS.ParameterStore, owner),
+		fetchSecretsManagerCmd(ctx, app.AWS.Secrets, owner, showAll),
+		fetchParameterStoreCmd(ctx, app.AWS.ParameterStore, owner, showAll),
 	)
 }
 
-func fetchSecretsManagerCmd(ctx context.Context, svc *aws.SecretsService, owner string) tea.Cmd {
+func fetchSecretsManagerCmd(ctx context.Context, svc *aws.SecretsService, owner string, showAll bool) tea.Cmd {
 	return func() tea.Msg {
 		if svc == nil {
 			slog.Warn("Secrets Manager service is nil; skipping fetch")
 			return secretsLoadedMsg{source: sourceSecretsManager}
 		}
-		secrets, err := svc.ListSecretsByOwner(ctx, owner)
+		var secrets []aws.Secret
+		var err error
+		if showAll {
+			secrets, err = svc.ListAllSecrets(ctx)
+		} else {
+			secrets, err = svc.ListSecretsByOwner(ctx, owner)
+		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to list secrets: %v", err))
 			return secretsLoadedMsg{source: sourceSecretsManager}
@@ -156,13 +180,19 @@ func fetchSecretsManagerCmd(ctx context.Context, svc *aws.SecretsService, owner 
 	}
 }
 
-func fetchParameterStoreCmd(ctx context.Context, svc *aws.ParameterStoreService, owner string) tea.Cmd {
+func fetchParameterStoreCmd(ctx context.Context, svc *aws.ParameterStoreService, owner string, showAll bool) tea.Cmd {
 	return func() tea.Msg {
 		if svc == nil {
 			slog.Warn("Parameter Store service is nil; skipping fetch")
 			return secretsLoadedMsg{source: sourceParameterStore}
 		}
-		params, err := svc.ListParametersByOwner(ctx, owner)
+		var params []aws.Parameter
+		var err error
+		if showAll {
+			params, err = svc.ListAllParameters(ctx)
+		} else {
+			params, err = svc.ListParametersByOwner(ctx, owner)
+		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to list parameters: %v", err))
 			return secretsLoadedMsg{source: sourceParameterStore}
@@ -209,7 +239,7 @@ func (m SecretsViewModel) Init() tea.Cmd {
 
 	return tea.Batch(
 		m.loader.Tick,
-		fetchAllSecretsCmd(m.app.Context, m.app, owner),
+		fetchAllSecretsCmd(m.app.Context, m.app, owner, m.showAllSecrets),
 	)
 }
 
@@ -228,6 +258,7 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pending <= 0 {
 			m.isLoading = false
 			m.list.SetItems(m.items)
+			m.updateTitle()
 		}
 
 	case secretFieldsLoadedMsg:
@@ -262,6 +293,23 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+func (m *SecretsViewModel) updateTitle() {
+	ownerPart := "My Secrets"
+	if m.showAllSecrets {
+		ownerPart = "All Secrets"
+	}
+
+	sourcePart := ""
+	switch m.currentFilter {
+	case filterSecretsManagerOnly:
+		sourcePart = " (SM only)"
+	case filterParameterStoreOnly:
+		sourcePart = " (PS only)"
+	}
+
+	m.list.Title = ownerPart + sourcePart
 }
 
 func (m *SecretsViewModel) updateInputRouting() {
@@ -458,13 +506,40 @@ func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		slog.Debug(fmt.Sprintf("Owner: %s", owner))
 		return tea.Batch(
 			m.loader.Tick,
-			fetchAllSecretsCmd(m.app.Context, m.app, owner),
+			fetchAllSecretsCmd(m.app.Context, m.app, owner, m.showAllSecrets),
 		)
 
 	case key.Matches(msg, c.ToggleFocus):
 		m.isDetailViewportFocused = !m.isDetailViewportFocused
 		m.updateInputRouting()
 		return nil
+
+	case key.Matches(msg, c.ToggleSource):
+		switch m.currentFilter {
+		case filterAll:
+			m.currentFilter = filterSecretsManagerOnly
+			m.list.SetFilterText("[SM]")
+		case filterSecretsManagerOnly:
+			m.currentFilter = filterParameterStoreOnly
+			m.list.SetFilterText("[PS]")
+		case filterParameterStoreOnly:
+			m.currentFilter = filterAll
+			m.list.ResetFilter()
+		}
+		m.updateTitle()
+		return nil
+
+	case key.Matches(msg, c.ToggleView):
+		m.showAllSecrets = !m.showAllSecrets
+		m.isLoading = true
+		m.items = nil
+		m.pending = 2
+		owner := ownerName(m.app.AWS.Identity)
+		m.updateTitle()
+		return tea.Batch(
+			m.loader.Tick,
+			fetchAllSecretsCmd(m.app.Context, m.app, owner, m.showAllSecrets),
+		)
 	}
 
 	if m.isDetailViewportFocused {

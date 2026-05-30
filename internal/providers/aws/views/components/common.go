@@ -15,7 +15,7 @@ var (
 	UnfocusedColor = lipgloss.Color("240")
 	ForceRefresh   = key.NewBinding(
 		key.WithKeys("r"),
-		key.WithHelp("r", "refresh RDSs"),
+		key.WithHelp("r", "refresh"),
 	)
 	ToggleFocus = key.NewBinding(
 		key.WithKeys("tab"),
@@ -24,6 +24,14 @@ var (
 	CopySecret = key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "copy password"),
+	)
+	ToggleView = key.NewBinding(
+		key.WithKeys("v"),
+		key.WithHelp("v", "toggle my/all secrets"),
+	)
+	ToggleSource = key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "Toggle Secrets/PS/All"),
 	)
 	NextField = key.NewBinding(
 		key.WithKeys("tab"),
