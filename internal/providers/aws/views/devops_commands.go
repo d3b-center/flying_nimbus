@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"flying_nimbus/internal/app"
 	aws "flying_nimbus/internal/providers/aws/backend"
@@ -121,6 +122,7 @@ func lsPartFrom(lower string) string {
 var lsSubCommands = []string{
 	"ec2",
 	"rds",
+	"iam-users",
 	"emr",
 	"sfn",
 	"ecs",
@@ -749,6 +751,22 @@ func (m DevOpsAgentViewModel) handleListRDSCmd() (DevOpsAgentViewModel, tea.Cmd)
 	})
 }
 
+func (m DevOpsAgentViewModel) handleListIAMUsersCmd() (DevOpsAgentViewModel, tea.Cmd) {
+	m.appendMsg("system", "Fetching IAM users with access keys...")
+	m.isSending = true
+	m.syncViewport()
+	m.viewport.GotoBottom()
+	ctx := m.app.Context
+	svc := m.app.AWS.Iam
+	return m, tea.Batch(m.spinner.Tick, func() tea.Msg {
+		users, err := svc.ListUsersWithKeys(ctx)
+		if err != nil {
+			return listResultMsg{err: err}
+		}
+		return listResultMsg{content: formatIAMUsersList(users)}
+	})
+}
+
 // sfnMachineEntry pairs a state machine with its recent executions.
 type sfnMachineEntry struct {
 	machine  aws.StateMachine
@@ -942,9 +960,12 @@ func (m DevOpsAgentViewModel) handleLsCmd(args []string) (DevOpsAgentViewModel, 
 		// #ls mwaa <env> → list DAGs
 		return m.handleListMWAADagsCmd(strings.Join(args[1:], " "))
 
+	case "iam-users":
+		return m.handleListIAMUsersCmd()
+
 	default:
 		m.appendMsg("system", fmt.Sprintf(
-			"Unknown resource %q. Try: ec2, rds, emr, emr <name>, sfn, sfn <name>, sfn <name> job <id>",
+			"Unknown resource %q. Try: ec2, rds, iam-users, emr, emr <name>, sfn, sfn <name>, sfn <name> job <id>",
 			args[0],
 		))
 		m.syncViewport()
@@ -1333,6 +1354,38 @@ func formatRDSList(instances []aws.RDSInstance) string {
 			endpoint = fmt.Sprintf("%s:%d", i.Endpoint, i.Port)
 		}
 		sb.WriteString(fmt.Sprintf("  • %-36s  %-22s  %-10s  %s\n", i.Id, engine, i.Status, endpoint))
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func formatIAMUsersList(users []aws.IAMUser) string {
+	if len(users) == 0 {
+		return "No IAM users with access keys found."
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("IAM Users with Access Keys (%d):\n", len(users)))
+	for _, u := range users {
+		sb.WriteString(fmt.Sprintf("\n  %s  [%s]\n", u.UserName, u.UserID))
+		sb.WriteString(fmt.Sprintf("    Created: %s\n", u.CreateDate.Local().Format("2006-01-02 15:04:05")))
+		
+		if len(u.AccessKeys) == 0 {
+			sb.WriteString("    No access keys\n")
+			continue
+		}
+		
+		sb.WriteString(fmt.Sprintf("    Access Keys (%d):\n", len(u.AccessKeys)))
+		for _, key := range u.AccessKeys {
+			keyAge := formatDuration(key.CreateDate)
+			lastUsedStr := "never"
+			if key.LastUsedDate != nil {
+				lastUsedStr = key.LastUsedDate.Local().Format("2006-01-02 15:04:05")
+				if key.LastUsedBy != "" {
+					lastUsedStr = fmt.Sprintf("%s (by %s)", lastUsedStr, key.LastUsedBy)
+				}
+			}
+			sb.WriteString(fmt.Sprintf("      • %-20s  %-8s  age: %-12s  last used: %s\n", 
+				key.AccessKeyID, key.Status, keyAge, lastUsedStr))
+		}
 	}
 	return strings.TrimRight(sb.String(), "\n")
 }
@@ -1810,6 +1863,29 @@ func eventLabel(eventType string) string {
 	return "  " + eventType
 }
 
+// formatDuration formats a time duration from the given date to now.
+func formatDuration(t time.Time) string {
+	duration := time.Since(t)
+	days := int(duration.Hours() / 24)
+	if days > 365 {
+		years := days / 365
+		return fmt.Sprintf("%dy", years)
+	}
+	if days > 30 {
+		months := days / 30
+		return fmt.Sprintf("%dmo", months)
+	}
+	if days > 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+	hours := int(duration.Hours())
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	minutes := int(duration.Minutes())
+	return fmt.Sprintf("%dm", minutes)
+}
+
 // ── Help text ─────────────────────────────────────────────────────────────────
 
 func devOpsHelpText() string {
@@ -1822,6 +1898,7 @@ func devOpsHelpText() string {
 		"  Listings  (#ls <resource>)\n" +
 		"  #ls ec2                                     — EC2 instances\n" +
 		"  #ls rds                                     — RDS instances\n" +
+		"  #ls iam-users                               — IAM users with access keys\n" +
 		"  #ls emr                                     — EMR clusters\n" +
 		"  #ls emr <name>                              — steps for an EMR cluster\n" +
 		"  #ls sfn                                     — Step Functions state machines\n" +
