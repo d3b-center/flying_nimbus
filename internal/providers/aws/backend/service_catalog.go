@@ -97,10 +97,10 @@ func (p ProvisionedProduct) Description() string {
 func (p ProvisionedProduct) FilterValue() string { return p.Name }
 
 type serviceCatalogAPI interface {
-	ScanProvisionedProducts(ctx context.Context, params *servicecatalog.ScanProvisionedProductsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ScanProvisionedProductsOutput, error)
+	SearchProvisionedProducts(ctx context.Context, params *servicecatalog.SearchProvisionedProductsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.SearchProvisionedProductsOutput, error)
 	DescribeRecord(ctx context.Context, params *servicecatalog.DescribeRecordInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.DescribeRecordOutput, error)
-	SearchProductsAsAdmin(ctx context.Context, params *servicecatalog.SearchProductsAsAdminInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.SearchProductsAsAdminOutput, error)
-	ListProvisioningArtifacts(ctx context.Context, params *servicecatalog.ListProvisioningArtifactsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ListProvisioningArtifactsOutput, error)
+	SearchProducts(ctx context.Context, params *servicecatalog.SearchProductsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.SearchProductsOutput, error)
+	DescribeProduct(ctx context.Context, params *servicecatalog.DescribeProductInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.DescribeProductOutput, error)
 	ListLaunchPaths(ctx context.Context, params *servicecatalog.ListLaunchPathsInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ListLaunchPathsOutput, error)
 	DescribeProvisioningParameters(ctx context.Context, params *servicecatalog.DescribeProvisioningParametersInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.DescribeProvisioningParametersOutput, error)
 	ProvisionProduct(ctx context.Context, params *servicecatalog.ProvisionProductInput, optFns ...func(*servicecatalog.Options)) (*servicecatalog.ProvisionProductOutput, error)
@@ -124,7 +124,7 @@ func InitServiceCatalogService(cfg aws.Config, ec2 *Ec2Service, cfn *CloudFormat
 	}
 }
 
-// ListProvisionedProducts returns provisioned products owned by the current user only.
+// ListProvisionedProducts returns provisioned products accessible to the current user.
 func (s *ServiceCatalogService) ListProvisionedProducts(ctx context.Context) ([]ProvisionedProduct, error) {
 	if s == nil || s.api == nil {
 		return nil, fmt.Errorf("Service Catalog client is not initialized")
@@ -136,7 +136,7 @@ func (s *ServiceCatalogService) ListProvisionedProducts(ctx context.Context) ([]
 	var products []ProvisionedProduct
 	var pageToken *string
 	for {
-		input := &servicecatalog.ScanProvisionedProductsInput{
+		input := &servicecatalog.SearchProvisionedProductsInput{
 			AccessLevelFilter: &types.AccessLevelFilter{
 				Key:   types.AccessLevelFilterKeyUser,
 				Value: aws.String("self"),
@@ -144,30 +144,31 @@ func (s *ServiceCatalogService) ListProvisionedProducts(ctx context.Context) ([]
 			PageToken: pageToken,
 		}
 		slog.Debug("Attempting to request provisioned products (user-only)")
-		output, err := s.api.ScanProvisionedProducts(ctx, input)
+		output, err := s.api.SearchProvisionedProducts(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("load provisioned products: %w", err)
 		}
 		if output == nil {
 			break
 		}
-		for _, detail := range output.ProvisionedProducts {
+		for _, attr := range output.ProvisionedProducts {
 			product := ProvisionedProduct{
-				ID:                     aws.ToString(detail.Id),
-				Name:                   aws.ToString(detail.Name),
-				Type:                   aws.ToString(detail.Type),
-				Status:                 string(detail.Status),
-				StatusMessage:          aws.ToString(detail.StatusMessage),
-				ProductID:              aws.ToString(detail.ProductId),
-				ProvisioningArtifactID: aws.ToString(detail.ProvisioningArtifactId),
-				Arn:                    aws.ToString(detail.Arn),
-				LastRecordID:           aws.ToString(detail.LastRecordId),
-				LastSuccessfulRecordID: aws.ToString(detail.LastSuccessfulProvisioningRecordId),
+				ID:                     aws.ToString(attr.Id),
+				Name:                   aws.ToString(attr.Name),
+				Type:                   aws.ToString(attr.Type),
+				Status:                 string(attr.Status),
+				StatusMessage:          aws.ToString(attr.StatusMessage),
+				ProductID:              aws.ToString(attr.ProductId),
+				ProductName:            aws.ToString(attr.ProductName),
+				ProvisioningArtifactID: aws.ToString(attr.ProvisioningArtifactId),
+				Arn:                    aws.ToString(attr.Arn),
+				LastRecordID:           aws.ToString(attr.LastRecordId),
+				LastSuccessfulRecordID: aws.ToString(attr.LastSuccessfulProvisioningRecordId),
 			}
-			if detail.CreatedTime != nil {
-				product.CreatedTime = *detail.CreatedTime
+			if attr.CreatedTime != nil {
+				product.CreatedTime = *attr.CreatedTime
 			}
-			if detail.LastRecordId != nil {
+			if attr.LastRecordId != nil {
 				product.LastUpdatedTime = time.Now()
 			}
 			products = append(products, product)
@@ -180,7 +181,7 @@ func (s *ServiceCatalogService) ListProvisionedProducts(ctx context.Context) ([]
 	return products, nil
 }
 
-// ListCatalogProducts returns all catalog products (paginates SearchProductsAsAdmin).
+// ListCatalogProducts returns catalog products accessible to the current user based on portfolio grants (paginates SearchProducts).
 func (s *ServiceCatalogService) ListCatalogProducts(ctx context.Context) ([]Product, error) {
 	if s == nil || s.api == nil {
 		return nil, fmt.Errorf("Service Catalog client is not initialized")
@@ -192,30 +193,26 @@ func (s *ServiceCatalogService) ListCatalogProducts(ctx context.Context) ([]Prod
 	var products []Product
 	var pageToken *string
 	for {
-		input := &servicecatalog.SearchProductsAsAdminInput{
+		input := &servicecatalog.SearchProductsInput{
 			PageToken: pageToken,
 		}
-		output, err := s.api.SearchProductsAsAdmin(ctx, input)
+		output, err := s.api.SearchProducts(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("list catalog products: %w", err)
 		}
 		if output == nil {
 			break
 		}
-		for _, pv := range output.ProductViewDetails {
-			if pv.ProductViewSummary == nil {
-				continue
-			}
-			summary := pv.ProductViewSummary
+		for _, pv := range output.ProductViewSummaries {
 			products = append(products, Product{
-				ProductID:          aws.ToString(summary.ProductId),
-				ProductName:        aws.ToString(summary.Name),
-				ProductType:        string(summary.Type),
-				Owner:              aws.ToString(summary.Owner),
-				ShortDescription:   aws.ToString(summary.ShortDescription),
-				Distributor:        aws.ToString(summary.Distributor),
-				SupportDescription: aws.ToString(summary.SupportDescription),
-				HasDefaultPath:     summary.HasDefaultPath,
+				ProductID:          aws.ToString(pv.ProductId),
+				ProductName:        aws.ToString(pv.Name),
+				ProductType:        string(pv.Type),
+				Owner:              aws.ToString(pv.Owner),
+				ShortDescription:   aws.ToString(pv.ShortDescription),
+				Distributor:        aws.ToString(pv.Distributor),
+				SupportDescription: aws.ToString(pv.SupportDescription),
+				HasDefaultPath:     pv.HasDefaultPath,
 			})
 		}
 		pageToken = output.NextPageToken
@@ -226,7 +223,7 @@ func (s *ServiceCatalogService) ListCatalogProducts(ctx context.Context) ([]Prod
 	return products, nil
 }
 
-// ListProvisioningArtifacts returns all provisioning artifacts (versions) for a product.
+// ListProvisioningArtifacts returns provisioning artifacts (versions) for a product accessible to the current user.
 func (s *ServiceCatalogService) ListProvisioningArtifacts(ctx context.Context, productID string) ([]ProvisioningArtifact, error) {
 	if s == nil || s.api == nil {
 		return nil, fmt.Errorf("Service Catalog client is not initialized")
@@ -235,19 +232,19 @@ func (s *ServiceCatalogService) ListProvisioningArtifacts(ctx context.Context, p
 		ctx = context.Background()
 	}
 
-	input := &servicecatalog.ListProvisioningArtifactsInput{
-		ProductId: aws.String(productID),
+	input := &servicecatalog.DescribeProductInput{
+		Id: aws.String(productID),
 	}
-	output, err := s.api.ListProvisioningArtifacts(ctx, input)
+	output, err := s.api.DescribeProduct(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("list provisioning artifacts: %w", err)
+		return nil, fmt.Errorf("describe product: %w", err)
 	}
-	if output == nil {
+	if output == nil || len(output.ProvisioningArtifacts) == 0 {
 		return []ProvisioningArtifact{}, nil
 	}
 
-	artifacts := make([]ProvisioningArtifact, 0, len(output.ProvisioningArtifactDetails))
-	for _, d := range output.ProvisioningArtifactDetails {
+	artifacts := make([]ProvisioningArtifact, 0, len(output.ProvisioningArtifacts))
+	for _, d := range output.ProvisioningArtifacts {
 		a := ProvisioningArtifact{
 			ID:          aws.ToString(d.Id),
 			Name:        aws.ToString(d.Name),
