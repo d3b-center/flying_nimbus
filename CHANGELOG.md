@@ -1,5 +1,17 @@
 # Flying Nimbus Change History
 
+## Release v1.4.0
+
+### Summary
+
+- Emojis: ? x1
+- Categories: Other Changes x1
+
+### New features and changes
+
+- [#46](https://github.com/d3b-center/flying_nimbus/pull/46) -  :bug: Fixed incorrect API calls. Replaced ADMIN calls with Search calls, which could be executed by any role - [e43fe156](https://github.com/d3b-center/flying_nimbus/commit/e43fe156b76fbc7b8660c19c86c735b41ebc14c7) by [alubneuski](https://github.com/alubneuski)
+
+
 ## Release v1.3.0
 
 ### Summary
