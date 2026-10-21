@@ -1,5 +1,18 @@
 # Flying Nimbus Change History
 
+## Release v1.3.0
+
+### Summary
+
+- Emojis: ? x2
+- Categories: Other Changes x2
+
+### New features and changes
+
+- [#43](https://github.com/d3b-center/flying_nimbus/pull/43) -  :tada: Added an ability to list all secrets, and toggle SM vs PS - [419f63ff](https://github.com/d3b-center/flying_nimbus/commit/419f63ff3ad0d08ef63f3d99277a1f04e1a71646) by [alubneuski](https://github.com/alubneuski)
+- [#42](https://github.com/d3b-center/flying_nimbus/pull/42) -  Update README with SSM Plugin installation instructions - [0a0bdb5b](https://github.com/d3b-center/flying_nimbus/commit/0a0bdb5b67796bedf6faad9cbf259fdd06424fcc) by [alubneuski](https://github.com/alubneuski)
+
+
 ## Release v1.2.0
 
 ### Summary
