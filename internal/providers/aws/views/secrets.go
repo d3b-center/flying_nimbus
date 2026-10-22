@@ -289,6 +289,7 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		cmd = m.handleKeypress(msg)
+		m.updateInputRouting()
 		return m, cmd
 	}
 
@@ -313,7 +314,7 @@ func (m *SecretsViewModel) updateTitle() {
 }
 
 func (m *SecretsViewModel) updateInputRouting() {
-	if m.isActionMenuActive || m.isDetailViewportFocused {
+	if m.list.FilterState() == list.Filtering || m.isActionMenuActive || m.isDetailViewportFocused {
 		m.inputRoutingStrategy = common.RouteFocusedFirst
 	} else {
 		m.inputRoutingStrategy = common.RouteGlobalFirst

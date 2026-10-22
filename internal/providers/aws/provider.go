@@ -20,6 +20,9 @@ type AwsProviderModel struct {
 }
 
 func (m AwsProviderModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	if m.menu.FilterState() == list.Filtering {
+		return common.RouteFocusedFirst
+	}
 	return common.RouteGlobalFirst
 }
 

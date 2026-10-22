@@ -232,37 +232,48 @@ func (m RootModel) handleRuntimeStats() (tea.Model, tea.Cmd) {
 }
 
 func (m RootModel) handleKeyMsg(msg tea.KeyMsg, current tea.Model) (tea.Model, tea.Cmd) {
-	// Global help toggle - always handle this first
+	// Ctrl+C always quits. It's the guaranteed way out if anything is eating keys.
+	if key.Matches(msg, DefaultKeymap.ForceQuit) {
+		return m, tea.Quit
+	}
+
+	// While the help screen or the auth-error screen is up, ignore every key
+	// except closing help (?) and quitting (q).
+	if m.help.ShowAll || m.isAuthError {
+		switch {
+		case key.Matches(msg, DefaultKeymap.ShowFullHelp):
+			m.help.ShowAll = !m.help.ShowAll
+		case key.Matches(msg, DefaultKeymap.Quit):
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	// If the current screen is capturing typing -- pass every key straight to it.
+	// That way letters like 'q', 'd' and '?' get typed into the filter instead of firing the
+	// quit/dev-console/help shortcuts. The shortcuts below only run when the
+	// screen is NOT capturing typing.
+	if m.getInputRoutingStrategy(current) == common.RouteFocusedFirst {
+		return m.delegateToCurrentModel(msg, current)
+	}
+
+	// '?' opens or closes the help screen.
 	if key.Matches(msg, DefaultKeymap.ShowFullHelp) {
 		m.help.ShowAll = !m.help.ShowAll
 		return m, nil
 	}
 
-	// When full help is shown or Auth Error, only allow toggling help off and quit
-	if m.help.ShowAll || m.isAuthError {
-		if key.Matches(msg, DefaultKeymap.Quit) {
-			return m, tea.Quit
-		}
-		// Block all other input when help is shown
-		return m, nil
-	}
-
-	// Handle quit
+	// 'q' quits.
 	if key.Matches(msg, DefaultKeymap.Quit) {
 		return m, tea.Quit
 	}
 
-	// Get routing strategy from current model
-	strategy := m.getInputRoutingStrategy(current)
-
-	// Handle global keys if routing strategy is RouteGlobalFirst
-	if strategy == common.RouteGlobalFirst {
-		if handled, model, cmd := m.handleGlobalKeys(msg); handled {
-			return model, cmd
-		}
+	// The other app-wide shortcuts: go back (esc) and toggle the dev console (d).
+	if handled, model, cmd := m.handleGlobalKeys(msg); handled {
+		return model, cmd
 	}
 
-	// Delegate to current model
+	// No shortcut matched, so let the current screen handle the key.
 	return m.delegateToCurrentModel(msg, current)
 }
 
