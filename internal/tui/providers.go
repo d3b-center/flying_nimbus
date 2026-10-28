@@ -18,6 +18,9 @@ type ProvidersModel struct {
 }
 
 func (m ProvidersModel) InputRoutingStrategy() common.InputRoutingStrategy {
+	if m.list.FilterState() == list.Filtering {
+		return common.RouteFocusedFirst
+	}
 	return common.RouteGlobalFirst
 }
 
