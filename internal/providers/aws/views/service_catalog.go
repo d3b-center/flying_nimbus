@@ -394,6 +394,15 @@ func (m *ServiceCatalogViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return dm, dCmd
 	}
 
+	// While the filter box is capturing text, send every key to the list so
+	// letters like 'v', 'c', 'r' and 'p' get typed into the filter instead of
+	// triggering this screen's own hotkeys.
+	if _, ok := msg.(tea.KeyMsg); ok && m.list.FilterState() == list.Filtering {
+		m.list, cmd = m.list.Update(msg)
+		m.updateInputRouting()
+		return m, cmd
+	}
+
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		if newM, keyCmd, handled := m.handleKeyWhenNotLoading(keyMsg); handled {
 			return newM, keyCmd

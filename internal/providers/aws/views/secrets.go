@@ -61,11 +61,10 @@ func (i SecretItem) Description() string {
 }
 
 func (i SecretItem) FilterValue() string {
-	prefix := "[SM]"
-	if i.source == sourceParameterStore {
-		prefix = "[PS]"
-	}
-	return prefix + " " + i.Title()
+	// Must equal the displayed name: the list highlights matched characters by
+	// their position in this string, so a prefix the row doesn't show would push
+	// every underline out of alignment. Source filtering is handled separately.
+	return i.Title()
 }
 
 // SecretsViewModel renders secrets from Secrets Manager and Parameter Store combined.
@@ -257,7 +256,7 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug(fmt.Sprintf("Received %d items from source %d; pending=%d", len(msg.items), msg.source, m.pending))
 		if m.pending <= 0 {
 			m.isLoading = false
-			m.list.SetItems(m.items)
+			m.list.SetItems(m.itemsForCurrentFilter())
 			m.updateTitle()
 		}
 
@@ -291,6 +290,14 @@ func (m SecretsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.handleKeypress(msg)
 		m.updateInputRouting()
 		return m, cmd
+
+	default:
+		// Forward anything else to the list. This is what delivers the list's
+		// async filter result (FilterMatchesMsg) so the list actually narrows
+		// as you type; without it the filter text is captured but ignored.
+		m.list, cmd = m.list.Update(msg)
+		m.updateSecretDetails()
+		return m, cmd
 	}
 
 	return m, cmd
@@ -311,6 +318,25 @@ func (m *SecretsViewModel) updateTitle() {
 	}
 
 	m.list.Title = ownerPart + sourcePart
+}
+
+// itemsForCurrentFilter returns the loaded items narrowed to the current
+// source filter (Secrets Manager only, Parameter Store only, or all).
+func (m SecretsViewModel) itemsForCurrentFilter() []list.Item {
+	if m.currentFilter == filterAll {
+		return m.items
+	}
+	want := sourceSecretsManager
+	if m.currentFilter == filterParameterStoreOnly {
+		want = sourceParameterStore
+	}
+	filtered := make([]list.Item, 0, len(m.items))
+	for _, it := range m.items {
+		if si, ok := it.(SecretItem); ok && si.source == want {
+			filtered = append(filtered, si)
+		}
+	}
+	return filtered
 }
 
 func (m *SecretsViewModel) updateInputRouting() {
@@ -487,6 +513,15 @@ func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		return cmd
 	}
 
+	// While the filter box is capturing text, send every key to the list so
+	// letters like 'r', 'v' and 's' get typed into the filter instead of
+	// triggering this screen's own hotkeys.
+	if m.list.FilterState() == list.Filtering {
+		m.list, cmd = m.list.Update(msg)
+		m.updateSecretDetails()
+		return cmd
+	}
+
 	switch {
 	case key.Matches(msg, c.CopySecret):
 		selected := m.list.SelectedItem()
@@ -519,14 +554,14 @@ func (m *SecretsViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 		switch m.currentFilter {
 		case filterAll:
 			m.currentFilter = filterSecretsManagerOnly
-			m.list.SetFilterText("[SM]")
 		case filterSecretsManagerOnly:
 			m.currentFilter = filterParameterStoreOnly
-			m.list.SetFilterText("[PS]")
 		case filterParameterStoreOnly:
 			m.currentFilter = filterAll
-			m.list.ResetFilter()
 		}
+		// Filter by source directly instead of typing [SM]/[PS] into the text
+		// filter, so FilterValue can stay equal to the displayed name.
+		m.list.SetItems(m.itemsForCurrentFilter())
 		m.updateTitle()
 		return nil
 

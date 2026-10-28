@@ -240,6 +240,15 @@ func (m Ec2ViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
 
 	case tea.KeyMsg:
+		if m.list.FilterState() == list.Filtering {
+			// Typing in the filter box: hand the key to the list and skip the
+			// screen hotkeys so letters aren't swallowed as commands.
+			newList, lcmd := m.list.Update(msg)
+			m.list = newList
+			cmds = append(cmds, lcmd)
+			break
+		}
+
 		if key.Matches(msg, c.ForceRefresh) {
 			m.isLoading = true
 			cmd := fetchEc2InstancesCmd(m.app.Context, m.app.AWS.Ec2)
