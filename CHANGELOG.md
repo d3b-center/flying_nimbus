@@ -1,5 +1,17 @@
 # Flying Nimbus Change History
 
+## Release v1.4.1
+
+### Summary
+
+- Emojis: ? x1
+- Categories: Other Changes x1
+
+### New features and changes
+
+- [#48](https://github.com/d3b-center/flying_nimbus/pull/48) -  PLAT-1352: Stop hotkeys from firing while typing in a filter - [74a437f3](https://github.com/d3b-center/flying_nimbus/commit/74a437f3e1a432fc17825db0fe6bd2a7803a1522) by [krirkpongsema](https://github.com/krirkpongsema)
+
+
 ## Release v1.4.0
 
 ### Summary
