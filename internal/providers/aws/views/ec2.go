@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"os/exec"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -484,7 +485,7 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
 		{Label: LocalPortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 		{Label: RemotePortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
-		{Label: RemoteHostLabel, Placeholder: "bastion.internal", CharLimit: 64, Validator: aws.ValidateHost},
+		{Label: RemoteHostLabel, Placeholder: "localhost", CharLimit: 64, Validator: aws.ValidateHost, Value: "localhost"},
 	}
 }
 
@@ -501,7 +502,14 @@ func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 
 	config := aws.PortForwardConfig{LocalPort: localPort, RemotePort: remotePort, RemoteHost: remoteHost}
 
-	cmd := m.app.AWS.Ssm.BuildRemotePortForwardCmd(instance.InstanceID, config)
+	var cmd *exec.Cmd
+	if remoteHost == "" || remoteHost == "localhost" {
+		// Default case – simple local‑to‑instance forwarding
+		cmd = m.app.AWS.Ssm.BuildPortForwardCmd(instance.InstanceID, config)
+	} else {
+		// Remote host forwarding
+		cmd = m.app.AWS.Ssm.BuildRemotePortForwardCmd(instance.InstanceID, config)
+	}
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return SsmSessionFinishedMsg{err} })
 }
 
