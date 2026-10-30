@@ -9,7 +9,9 @@ import (
 	"flying_nimbus/internal/tui/constants"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -34,6 +36,7 @@ const (
 	StateStopped    InstanceState = "stopped"
 	LocalPortLabel  string        = "Local Port"
 	RemotePortLabel string        = "Remote Port"
+	RemoteHostLabel string        = "Remote Host"
 )
 
 // Ec2ViewModel manages the EC2 instance list and details view.
@@ -408,7 +411,7 @@ func (m *Ec2ViewModel) handleKeypress(msg tea.KeyMsg) tea.Cmd {
 func (m *Ec2ViewModel) buildActions() {
 	m.actionMenu = c.NewActionModal("EC2 Actions", []c.ActionItem{
 		{Label: "Shell", Action: m.ssmShell},
-		{Label: "Port Forward", Action: m.ssmPortForward},
+		{Label: "Port/Host Forward", Action: m.ssmPortForward},
 		{Label: "Start/Stop", Action: m.handleStartStop},
 	})
 }
@@ -455,7 +458,7 @@ func (m Ec2ViewModel) ssmShell() tea.Cmd {
 func (m *Ec2ViewModel) openPortForwardInputForm() {
 	instance := m.list.SelectedItem().(aws.Ec2Instance)
 	m.inputForm = c.NewInputForm(
-		fmt.Sprintf("Port Forward: %s", instance.Name),
+		fmt.Sprintf("Port/Host Forward: %s", instance.Name),
 		m.ssmPortForwardInputs(),
 		m.ssmPortForwardOnSubmit,
 	)
@@ -482,6 +485,7 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 	return []c.InputField{
 		{Label: LocalPortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
 		{Label: RemotePortLabel, Placeholder: "8080", CharLimit: 5, Validator: aws.ValidatePort},
+		{Label: RemoteHostLabel, Placeholder: "localhost", CharLimit: 64, Validator: aws.ValidateHost, Value: "localhost"},
 	}
 }
 
@@ -489,23 +493,24 @@ func (m Ec2ViewModel) ssmPortForwardInputs() []c.InputField {
 func (m Ec2ViewModel) ssmPortForwardOnSubmit(values c.InputFormResult) tea.Cmd {
 	instance, err := m.validateSsmInstance()
 	if err != nil {
-		return func() tea.Msg {
-			return c.ModalResponseMsg{Err: err}
-		}
+		return func() tea.Msg { return c.ModalResponseMsg{Err: err} }
 	}
 
 	localPort, _ := strconv.Atoi(values[LocalPortLabel])
 	remotePort, _ := strconv.Atoi(values[RemotePortLabel])
+	remoteHost := strings.TrimSpace(values[RemoteHostLabel])
 
-	config := aws.PortForwardConfig{
-		LocalPort:  localPort,
-		RemotePort: remotePort,
+	config := aws.PortForwardConfig{LocalPort: localPort, RemotePort: remotePort, RemoteHost: remoteHost}
+
+	var cmd *exec.Cmd
+	if remoteHost == "" || remoteHost == "localhost" {
+		// Default case – simple local‑to‑instance forwarding
+		cmd = m.app.AWS.Ssm.BuildPortForwardCmd(instance.InstanceID, config)
+	} else {
+		// Remote host forwarding
+		cmd = m.app.AWS.Ssm.BuildRemotePortForwardCmd(instance.InstanceID, config)
 	}
-
-	cmd := m.app.AWS.Ssm.BuildPortForwardCmd(instance.InstanceID, config)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return SsmSessionFinishedMsg{err}
-	})
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return SsmSessionFinishedMsg{err} })
 }
 
 func (m *Ec2ViewModel) handleStartStop() tea.Cmd {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
@@ -112,6 +113,14 @@ func ValidatePort(port string) error {
 	}
 	if p < 1 || p > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535, got %d", p)
+	}
+	return nil
+}
+
+// validateHost ensures a non‑empty remote host value.
+func ValidateHost(host string) error {
+	if strings.TrimSpace(host) == "" {
+		return fmt.Errorf("remote host required")
 	}
 	return nil
 }
